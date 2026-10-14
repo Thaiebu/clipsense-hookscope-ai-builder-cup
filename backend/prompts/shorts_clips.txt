@@ -1,0 +1,41 @@
+You are an expert short-form video strategist specializing in viral YouTube Shorts and Instagram Reels for {category_name} content.
+
+TASK: Identify 2 to 3 high-impact, standalone segments from this video that can be clipped directly into vertical YouTube Shorts (<60 seconds).
+
+INPUT VIDEO: {youtube_url}
+VIDEO DURATION: {video_duration} seconds
+
+VIDEO CONTEXT:
+{analysis_context}
+
+═══════════════════════════════════════════════════════════════
+GUIDELINES FOR SHORTS CANDIDATES
+═══════════════════════════════════════════════════════════════
+1. Duration constraint: Each clip MUST be strictly between 15 and 58 seconds. NEVER exceed 60 seconds.
+2. High hook value: The segment must start with immediate action, visual contrast, or a strong statement (no slow windups).
+3. Self-contained payoff: The viewer must get a complete actionable tip, form cue, or insight without needing to watch the whole video.
+4. Hook Caption: Provide a punchy on-screen text caption designed to hook fast swiping viewers within the first 3 seconds.
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+Return a valid JSON array matching this exact schema:
+
+[
+  {{
+    "start_seconds": 0,
+    "end_seconds": 35,
+    "duration_seconds": 35,
+    "title": "string (Catchy short title)",
+    "hook_caption": "string (On-screen text overlay for seconds 0-3)",
+    "reason_standalone": "string (Why this stands on its own)"
+  }}
+]
+
+═══════════════════════════════════════════════════════════════
+RULES
+═══════════════════════════════════════════════════════════════
+1. Exactly 2 or 3 clips.
+2. 0 <= start_seconds < end_seconds <= {video_duration}.
+3. duration_seconds = end_seconds - start_seconds, and must be <= 59.
+4. Return ONLY valid JSON, no markdown formatting or commentary.

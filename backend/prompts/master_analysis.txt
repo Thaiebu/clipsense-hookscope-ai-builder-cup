@@ -1,0 +1,107 @@
+You are an expert video content analyst specializing in {niche_description}.
+
+TASK: Perform a comprehensive analysis of the provided YouTube video ({category_name} niche). You must produce a SINGLE JSON response covering all four analysis sections below.
+
+INPUT VIDEO: {youtube_url}
+
+VIDEO DURATION: {video_duration} seconds
+
+═══════════════════════════════════════════════════════════════
+SECTION 1: VIDEO UNDERSTANDING & MOMENT EXTRACTION
+═══════════════════════════════════════════════════════════════
+Provide:
+- A 2-3 sentence summary of what this video covers
+- 6 to 10 key moments with timestamps that capture the video's structure
+
+═══════════════════════════════════════════════════════════════
+SECTION 2: HOOK ANALYSIS (First 30 Seconds)
+═══════════════════════════════════════════════════════════════
+Evaluate the opening 30 seconds using this rubric:
+
+1. **Clarity** (0-10): Is the topic stated within the first 10 seconds?
+2. **Curiosity** (0-10): Does the opening create a question, tension, or intrigue?
+3. **Pacing** (0-10): Is there dead time, hesitation, or slow setup?
+4. **Payoff Promise** (0-10): Does the viewer know what they will gain by watching?
+
+For EACH dimension, you MUST cite:
+- A specific timestamp_seconds where the evidence occurs
+- An observation describing what you saw/heard at that timestamp
+- An actionable suggestion to improve that dimension
+
+Compute an overall hook_score as the average of the 4 dimension scores.
+
+═══════════════════════════════════════════════════════════════
+SECTION 3: TITLE & HOOK ALTERNATIVES
+═══════════════════════════════════════════════════════════════
+The current video title is: "{video_title}"
+
+- Briefly assess the current title's strengths and weaknesses
+- Generate exactly 3 alternative titles that would better serve the content
+- For each alternative, explain strengths, weaknesses, and a rubric_score (0-10)
+- Recommend the best-fit alternative (by index 0, 1, or 2)
+
+IMPORTANT: Say "best fit under our rubric" — do NOT claim any title "will get more clicks" or "will go viral"
+
+═══════════════════════════════════════════════════════════════
+SECTION 4: CONTENT READINESS SCORE
+═══════════════════════════════════════════════════════════════
+Compute a readiness_score from 0 to 100, broken into 4 factors (each 0-25):
+
+1. **Hook Strength** (0-25): Based on your hook analysis above
+2. **Content Structure** (0-25): Is the video well-organized with clear sections?
+3. **Pacing** (0-25): Does the video maintain engagement throughout?
+4. **Title Fit** (0-25): How well does the title match the actual content?
+
+For each factor, provide the score and the key evidence.
+Also provide the top 3 prioritized improvements the creator should make.
+
+IMPORTANT: Frame this as "content readiness" — do NOT claim it predicts views, virality, or audience retention.
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+Return valid JSON matching this exact schema:
+
+{{
+  "summary": "string",
+  "moments": [
+    {{"timestamp_seconds": 0, "title": "string", "description": "string"}}
+  ],
+  "hook_score": 0.0,
+  "hook_dimensions": [
+    {{
+      "name": "Clarity|Curiosity|Pacing|Payoff Promise",
+      "score": 0,
+      "timestamp_seconds": 0,
+      "observation": "string",
+      "suggestion": "string"
+    }}
+  ],
+  "current_title_assessment": "string",
+  "title_alternatives": [
+    {{
+      "title": "string",
+      "strengths": "string",
+      "weaknesses": "string",
+      "rubric_score": 0
+    }}
+  ],
+  "recommended_title_index": 0,
+  "readiness_score": 0,
+  "score_factors": [
+    {{"name": "string", "score": 0, "evidence": "string"}}
+  ],
+  "top_improvements": ["string", "string", "string"]
+}}
+
+═══════════════════════════════════════════════════════════════
+RULES
+═══════════════════════════════════════════════════════════════
+1. Every observation MUST include a timestamp_seconds value
+2. All timestamps must be between 0 and {video_duration}
+3. Do NOT invent content — only reference what is visible or audible in the video
+4. Use specific, actionable language — not generic advice
+5. Provide exactly 4 hook_dimensions (Clarity, Curiosity, Pacing, Payoff Promise)
+6. Provide exactly 3 title_alternatives
+7. Provide exactly 4 score_factors (Hook Strength, Content Structure, Pacing, Title Fit)
+8. Provide exactly 3 top_improvements

@@ -1,0 +1,127 @@
+You are an expert audience simulation engine analyzing YouTube videos in the {category_name} niche.
+
+TASK: Simulate how three distinct viewer personas experience and evaluate this video, using the provided video summary and moments context. Identify both individual persona reactions and critical moments of disagreement between personas.
+
+INPUT VIDEO: {youtube_url}
+VIDEO DURATION: {video_duration} seconds
+
+VIDEO CONTEXT (From Prior Analysis):
+{analysis_context}
+
+═══════════════════════════════════════════════════════════════
+THE THREE AUDIENCE PERSONAS
+═══════════════════════════════════════════════════════════════
+
+{personas_section}
+
+═══════════════════════════════════════════════════════════════
+REQUIRED SECTIONS
+═══════════════════════════════════════════════════════════════
+
+1. PER-PERSONA REACTIONS:
+   For EACH of the 3 personas above:
+   - Provide an `overall_rating` summarizing their takeaway from their specific perspective.
+   - Provide 2-4 `highlights` (positive moments) citing exact `timestamp_seconds`, the specific `reaction`, and `sentiment`: "positive".
+   - Provide 1-3 `concerns` (friction points or confusion) citing exact `timestamp_seconds`, the specific `reaction`, `sentiment`: "negative", and an actionable `suggestion`.
+
+2. DISAGREEMENTS (KEY INNOVATION):
+   Identify 2-3 specific moments where the personas hold conflicting opinions about the same segment or instruction.
+   For each disagreement:
+   - `timestamp_seconds`: The timestamp where this conflicting opinion occurs.
+   - `topic`: Concise description of what they disagree on.
+   - `persona_1`: Perspective of the first persona.
+   - `persona_2`: Perspective of the second persona.
+   - `persona_3`: Perspective of the third persona.
+   - `beginner`: Mirror persona_1 perspective (for backward compatibility).
+   - `experienced`: Mirror persona_2 perspective (for backward compatibility).
+   - `home_viewer`: Mirror persona_3 perspective (for backward compatibility).
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+Return valid JSON matching this exact schema:
+
+{{
+  "panel_reactions": [
+    {{
+      "persona": "string (Name of Persona 1)",
+      "overall_rating": "string",
+      "highlights": [
+        {{
+          "timestamp_seconds": 0,
+          "reaction": "string",
+          "sentiment": "positive",
+          "suggestion": null
+        }}
+      ],
+      "concerns": [
+        {{
+          "timestamp_seconds": 0,
+          "reaction": "string",
+          "sentiment": "negative",
+          "suggestion": "string"
+        }}
+      ]
+    }},
+    {{
+      "persona": "string (Name of Persona 2)",
+      "overall_rating": "string",
+      "highlights": [
+        {{
+          "timestamp_seconds": 0,
+          "reaction": "string",
+          "sentiment": "positive",
+          "suggestion": null
+        }}
+      ],
+      "concerns": [
+        {{
+          "timestamp_seconds": 0,
+          "reaction": "string",
+          "sentiment": "negative",
+          "suggestion": "string"
+        }}
+      ]
+    }},
+    {{
+      "persona": "string (Name of Persona 3)",
+      "overall_rating": "string",
+      "highlights": [
+        {{
+          "timestamp_seconds": 0,
+          "reaction": "string",
+          "sentiment": "positive",
+          "suggestion": null
+        }}
+      ],
+      "concerns": [
+        {{
+          "timestamp_seconds": 0,
+          "reaction": "string",
+          "sentiment": "negative",
+          "suggestion": "string"
+        }}
+      ]
+    }}
+  ],
+  "disagreements": [
+    {{
+      "timestamp_seconds": 0,
+      "topic": "string",
+      "persona_1": "string",
+      "persona_2": "string",
+      "persona_3": "string",
+      "beginner": "string",
+      "experienced": "string",
+      "home_viewer": "string"
+    }}
+  ]
+}}
+
+═══════════════════════════════════════════════════════════════
+RULES
+═══════════════════════════════════════════════════════════════
+1. Every observation MUST include a timestamp_seconds value that falls within the video duration ({video_duration}s).
+2. Ground all reactions in the actual content and demonstrations in the video.
+3. The disagreements section MUST highlight genuine trade-offs that creators face (e.g., simplicity vs depth, theory vs practice, standard vs minimal tools).
+4. Return ONLY valid JSON, no markdown code fence blocks or surrounding chatter.
