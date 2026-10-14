@@ -11,11 +11,13 @@ export default function UrlInput({
   isLoading,
   onSubmit,
   onCancel,
+  onSelectSample,
 }) {
-  const handleSampleClick = (sampleUrl, sampleCategory) => {
-    setUrl(sampleUrl);
-    if (sampleCategory && niches[sampleCategory.toLowerCase()]) {
-      setCategory(sampleCategory.toLowerCase());
+  const handleSampleClick = (sample) => {
+    if (onSelectSample) {
+      onSelectSample(sample);
+    } else {
+      setUrl(sample.youtube_url);
     }
   };
 
@@ -98,22 +100,35 @@ export default function UrlInput({
           )}
         </div>
 
-
         {/* 1-Click Curated Demos */}
         {samples && samples.length > 0 && (
           <div className="samples-row">
             <span className="samples-label">⚡ 1-Click Demos:</span>
-            {samples.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="sample-chip"
-                onClick={() => handleSampleClick(s.youtube_url, 'fitness')}
-                disabled={isLoading}
-              >
-                {s.title.length > 38 ? `${s.title.substring(0, 36)}...` : s.title}
-              </button>
-            ))}
+            {samples.map((s) => {
+              const isActive = url.trim() === s.youtube_url.trim();
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`sample-chip ${isActive ? 'active' : ''}`}
+                  style={
+                    isActive
+                      ? {
+                          borderColor: 'var(--primary)',
+                          background: 'rgba(99, 102, 241, 0.25)',
+                          color: 'var(--text-main)',
+                          boxShadow: '0 0 10px var(--primary-glow)',
+                        }
+                      : {}
+                  }
+                  onClick={() => handleSampleClick(s)}
+                  disabled={isLoading}
+                  title={`Load & analyze: ${s.title}`}
+                >
+                  {s.title.length > 38 ? `${s.title.substring(0, 36)}...` : s.title}
+                </button>
+              );
+            })}
           </div>
         )}
       </form>

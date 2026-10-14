@@ -88,8 +88,10 @@ export default function App() {
   };
 
   // Main Submit Pipeline (Calls 1 & 2 only)
-  const handleAnalyze = async () => {
-    if (!url.trim()) return;
+  const handleAnalyze = async (overrideUrl = null, overrideCategory = null) => {
+    const targetUrl = (overrideUrl || url).trim();
+    const targetCategory = overrideCategory || category;
+    if (!targetUrl) return;
 
     // Reset previous states
     setError(null);
@@ -108,9 +110,9 @@ export default function App() {
       // Step 2: Call 1 — Master Analysis
       setCurrentStep(2);
       const res1 = await analyzeVideo({
-        youtubeUrl: url,
+        youtubeUrl: targetUrl,
         videoDuration,
-        category,
+        category: targetCategory,
         signal,
       });
 
@@ -128,10 +130,10 @@ export default function App() {
       // Step 3: Call 2 — Audience Panel (grounded in summary from Call 1)
       setCurrentStep(3);
       const res2 = await analyzePanel({
-        youtubeUrl: url,
+        youtubeUrl: targetUrl,
         analysisContext: res1.data.summary,
         videoDuration,
-        category,
+        category: targetCategory,
         signal,
       });
 
@@ -156,6 +158,14 @@ export default function App() {
       abortControllerRef.current = null;
     }
   };
+
+  // Instant 1-Click Demo Handler
+  const handleSelectSample = (sample) => {
+    setUrl(sample.youtube_url);
+    setCategory('fitness');
+    handleAnalyze(sample.youtube_url, 'fitness');
+  };
+
 
   // On-Demand Shorts Generation (Call 3)
   const handleGenerateShorts = async () => {
@@ -211,7 +221,9 @@ export default function App() {
         isLoading={isLoading}
         onSubmit={handleAnalyze}
         onCancel={handleCancel}
+        onSelectSample={handleSelectSample}
       />
+
 
       {/* Progressive Step Tracker & Circular Loader (visible while analyzing) */}
       {isLoading && <ProgressTracker currentStep={currentStep} />}

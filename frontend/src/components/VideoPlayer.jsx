@@ -6,14 +6,15 @@ import { ExternalLink, AlertTriangle, Play } from 'lucide-react';
  */
 function extractVideoId(url) {
   if (!url) return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-  const match = url.match(regExp);
-  return match && match[2].length === 11 ? match[2] : null;
+  const cleanUrl = url.trim();
+  const regExp = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/;
+  const match = cleanUrl.match(regExp);
+  return match && match[1] ? match[1] : null;
 }
 
 const VideoPlayer = forwardRef(({ url, onDurationDetected }, ref) => {
   const videoId = extractVideoId(url);
-  const iframeRef = useRef(null);
+  const containerRef = useRef(null);
   const playerRef = useRef(null);
   const [embedError, setEmbedError] = useState(false);
   const [currentTimestamp, setCurrentTimestamp] = useState(null);
@@ -24,31 +25,45 @@ const VideoPlayer = forwardRef(({ url, onDurationDetected }, ref) => {
       const tag = document.createElement('script');
       tag.src = 'https://www.youtube.com/iframe_api';
       const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+      if (firstScriptTag && firstScriptTag.parentNode) {
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+      } else {
+        document.head.appendChild(tag);
+      }
     }
   }, []);
 
-  // Initialize YouTube Player when videoId changes
+  // Update or initialize YouTube player when videoId changes
   useEffect(() => {
     if (!videoId) return;
     setEmbedError(false);
+    setCurrentTimestamp(null);
+
+    // If player already exists and is initialized, cue the new video directly!
+    if (playerRef.current && typeof playerRef.current.cueVideoById === 'function') {
+      try {
+        playerRef.current.cueVideoById(videoId);
+        return;
+      } catch (err) {
+        console.warn('Failed to cue video by ID, re-initializing player:', err);
+      }
+    }
 
     let isSubscribed = true;
+    let pollInterval = null;
 
     function initPlayer() {
       if (!window.YT || !window.YT.Player) {
-        setTimeout(initPlayer, 200);
-        return;
+        return; // Will retry in interval
       }
 
-      if (!isSubscribed) return;
+      const targetEl = containerRef.current;
+      if (!targetEl || !isSubscribed) return;
+
+      clearInterval(pollInterval);
 
       try {
-        if (playerRef.current && typeof playerRef.current.destroy === 'function') {
-          playerRef.current.destroy();
-        }
-
-        playerRef.current = new window.YT.Player(`yt-player-container`, {
+        playerRef.current = new window.YT.Player(targetEl, {
           videoId,
           playerVars: {
             enablejsapi: 1,
@@ -81,17 +96,22 @@ const VideoPlayer = forwardRef(({ url, onDurationDetected }, ref) => {
       }
     }
 
-    initPlayer();
+    if (window.YT && window.YT.Player) {
+      initPlayer();
+    } else {
+      pollInterval = setInterval(initPlayer, 200);
+    }
 
     return () => {
       isSubscribed = false;
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, [videoId]);
 
   // Expose seekTo function to parent/other components
   useImperativeHandle(ref, () => ({
     seekTo: (seconds) => {
-      // 3-second pre-roll buffer (per plan loophole #3)
+      // 3-second pre-roll buffer (per design spec)
       const targetTime = Math.max(0, seconds - 3);
       setCurrentTimestamp(seconds);
 
@@ -103,8 +123,8 @@ const VideoPlayer = forwardRef(({ url, onDurationDetected }, ref) => {
       }
 
       // Smooth scroll the player into view if needed
-      if (iframeRef.current) {
-        iframeRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (containerRef.current) {
+        containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     },
   }));
@@ -112,15 +132,15 @@ const VideoPlayer = forwardRef(({ url, onDurationDetected }, ref) => {
   if (!videoId) {
     return (
       <div className="player-card" style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
-        <p style={{ color: 'var(--text-muted)' }}>Paste a YouTube link above to load the video preview.</p>
+        <p style={{ color: 'var(--text-muted)' }}>Paste a YouTube link above or click a 1-Click Demo to load the video preview.</p>
       </div>
     );
   }
 
   return (
-    <div className="player-card" ref={iframeRef}>
+    <div className="player-card">
       <div className="video-responsive-wrapper">
-        <div id="yt-player-container" />
+        <div ref={containerRef} />
       </div>
 
       <div className="player-info-bar">
