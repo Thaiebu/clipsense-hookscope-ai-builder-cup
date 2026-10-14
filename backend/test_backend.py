@@ -196,6 +196,28 @@ class TestBackend(unittest.TestCase):
         self.assertFalse(body["success"])
         self.assertIn("specify a target language", body["error"])
 
+    def test_translate_tamil_authentic_script(self):
+        payload = {
+            "target_language": "Tamil",
+            "summary": "A foundational full-body dumbbell workout designed for beginners.",
+            "top_improvements": [
+                "Replace placeholder title with descriptive title.",
+                "Eliminate the 10-second opening static title cards."
+            ],
+            "title_alternatives": ["Build Full-Body Strength With Just 2 Dumbbells"]
+        }
+        response = self.client.post("/api/translate", json=payload)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["success"])
+        data = body["data"]
+        self.assertEqual(data["target_language"], "Tamil")
+        self.assertTrue(len(data["translated_summary"]) > 0)
+
+        # Verify authentic Tamil Unicode range (\u0B80-\u0BFF) is present
+        has_tamil = any("\u0b80" <= char <= "\u0bff" for char in data["translated_summary"])
+        self.assertTrue(has_tamil, "Translated summary must contain authentic Tamil script characters")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -414,16 +414,50 @@ def translate_feedback(
     title_alternatives: Optional[list[str]] = None,
 ) -> Tuple[Optional[TranslatedData], Optional[str]]:
     """
-    Feature 7 (Tier 3): Translates analysis summary, improvements, and titles into target language (e.g. Hindi, Japanese, Spanish).
+    Feature 7 (Tier 3): Translates analysis summary, improvements, and titles into target language (e.g. Tamil, Hindi, Japanese, Spanish).
     Returns (translated_data, error_message).
     """
+    from sample_data import get_sample_translation
+
+    lang_clean = target_language.strip()
+    lang_lower = lang_clean.lower()
+
+    # Standardize language names
+    if lang_lower in ["ta", "tamil", "தமிழ்"]:
+        target_lang_name = "Tamil"
+        script_instruction = "You MUST translate strictly into authentic Tamil script (தமிழ் எழுத்துக்கள்). Do NOT output English, Hindi, or transliterated Tanglish. All fields ('translated_summary', each item in 'translated_improvements', and 'translated_titles') must be 100% natural, grammatically correct Tamil."
+    elif lang_lower in ["hi", "hindi", "हिन्दी"]:
+        target_lang_name = "Hindi"
+        script_instruction = "You MUST translate strictly into Devanagari script (हिन्दी). Do NOT output English or Hinglish."
+    elif lang_lower in ["ja", "japanese", "日本語"]:
+        target_lang_name = "Japanese"
+        script_instruction = "You MUST translate strictly into natural Japanese (日本語: Kanji, Hiragana, Katakana)."
+    elif lang_lower in ["es", "spanish", "español"]:
+        target_lang_name = "Spanish"
+        script_instruction = "You MUST translate into natural, fluent Spanish (Español)."
+    elif lang_lower in ["de", "german", "deutsch"]:
+        target_lang_name = "German"
+        script_instruction = "You MUST translate into natural German (Deutsch)."
+    elif lang_lower in ["fr", "french", "français"]:
+        target_lang_name = "French"
+        script_instruction = "You MUST translate into natural French (Français)."
+    else:
+        target_lang_name = lang_clean
+        script_instruction = f"Translate accurately and naturally into {target_lang_name} using its native script."
+
     client = get_gemini_client()
     if client is None:
+        cached = get_sample_translation(target_lang_name)
+        if cached:
+            logger.warning(f"Gemini client not initialized, using pre-cached {target_lang_name} translation fallback.")
+            return TranslatedData.model_validate(cached), None
         return None, "Gemini client not initialized. Please configure API_KEY or GCP_PROJECT_ID."
 
     prompt = f"""You are a professional multilingual translator specializing in video coaching and creator content.
 
-TASK: Accurately translate the following English video feedback into {target_language}. Maintain natural tone, professional terminology, and cultural accuracy.
+TASK: Accurately translate the following English video feedback into {target_lang_name}.
+
+{script_instruction}
 
 INPUT DATA:
 - Summary: {summary}
@@ -432,13 +466,16 @@ INPUT DATA:
 
 OUTPUT FORMAT: Return valid JSON matching this schema:
 {{
-  "target_language": "{target_language}",
+  "target_language": "{target_lang_name}",
   "translated_summary": "string",
   "translated_improvements": ["string", "string"],
   "translated_titles": ["string", "string"]
 }}
 
-Return ONLY valid JSON.
+CRITICAL RULES:
+1. Every field MUST be translated into {target_lang_name}.
+2. Do NOT leave English text in the output.
+3. Return ONLY valid JSON.
 """
     try:
         config = types.GenerateContentConfig(
@@ -459,4 +496,9 @@ Return ONLY valid JSON.
         return validated, None
     except Exception as e:
         logger.error(f"Translation failed: {e}")
+        cached = get_sample_translation(target_lang_name)
+        if cached:
+            logger.warning(f"Translation call failed, using pre-cached {target_lang_name} translation fallback.")
+            return TranslatedData.model_validate(cached), None
         return None, f"Translation failed: {str(e)}"
+

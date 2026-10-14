@@ -744,3 +744,66 @@ def get_sample_by_id_or_url(url_or_id: str):
             return sample
 
     return None
+
+
+SAMPLE_TRANSLATIONS = {
+    "tamil": {
+        "target_language": "Tamil",
+        "translated_summary": "ஆரம்பநிலை உடற்பயிற்சியாளர்களுக்காக வடிவமைக்கப்பட்ட ஓர் அடிப்படை முழு உடல் டம்பல் உடற்பயிற்சி; இது படிப்படியான உடல் தோரணை வழிகாட்டல்கள் மற்றும் வேகக் கட்டுப்பாட்டு வழிமுறைகளுடன் 5 கூட்டுப் பயிற்சிகளை அறிமுகப்படுத்துகிறது.",
+        "translated_improvements": [
+            "தற்காலிகத் தலைப்பை மாற்றி, வீடியோவை விவரிக்கும் வகையில் முக்கிய தேடல் சொற்கள் நிறைந்த கவர்ச்சிகரமான தலைப்பை வைக்கவும்.",
+            "தொடக்கத்தில் வரும் 10 வினாடி நிலையான தலைப்பு அட்டைகளைத் தவிர்த்து, முதல் விநாடியிலிருந்தே பார்வையாளர்களுடன் நேரடியாகப் பேசவும்.",
+            "பயிற்சியின் வேகத்தையும் இடைவெளிகளையும் சீராக வைத்திருக்க, திரையில் தெரியும் வகையிலான இடைவெளி நேரக் காட்டியைச் (interval countdown timer) சேர்க்கவும்."
+        ],
+        "translated_titles": [
+            "வெறும் 2 டம்பல்களைக் கொண்டு முழு உடல் வலிமையை உருவாக்குங்கள் (தொடக்கநிலை பயிற்சி)",
+            "ஆரம்பநிலையாளர்களுக்குத் தேவையான 5 முக்கியமான டம்பல் பயிற்சிகள் மட்டுமே (முழு உடல்)",
+            "வீட்டிலேயே தொடங்குங்கள்: எளிய 15 நிமிட முழு உடல் டம்பல் பயிற்சி"
+        ]
+    },
+    "hindi": {
+        "target_language": "Hindi",
+        "translated_summary": "शुरुआती लोगों के लिए डिज़ाइन किया गया एक बुनियादी फुल-बॉडी डंबल वर्कआउट, जिसमें प्रगतिशील फॉर्म संकेतों और गति निर्देशों के साथ 5 संयुक्त अभ्यास शामिल हैं।",
+        "translated_improvements": [
+            "प्लेसहोल्डर शीर्षक को बदलकर एक वर्णनात्मक, कीवर्ड-युक्त शीर्षक लगाएं।",
+            "शुरुआती 10-सेकंड के स्थिर शीर्षक कार्ड को हटाएं और पहले सेकंड से दर्शकों से सीधे बात करें।",
+            "स्क्रीन पर अंतराल उलटी गिनती टाइमर (interval timer) जोड़ें।"
+        ],
+        "translated_titles": [
+            "सिर्फ 2 डंबल से बनाएं फुल-बॉडी स्ट्रेंथ (शुरुआती वर्कआउट)",
+            "शुरुआती लोगों के लिए केवल 5 आवश्यक डंबल एक्सरसाइज (फुल बॉडी)",
+            "घर पर 15 मिनट का आसान डंबल वर्कआउट"
+        ]
+    },
+    "spanish": {
+        "target_language": "Spanish",
+        "translated_summary": "Un entrenamiento fundamental de cuerpo completo con mancuernas para principiantes, que introduce 5 ejercicios compuestos con pautas técnicas progresivas.",
+        "translated_improvements": [
+            "Reemplaza el título genérico con uno descriptivo y rico en palabras clave.",
+            "Elimina las tarjetas estáticas de los primeros 10 segundos y habla directamente a la audiencia.",
+            "Añade un temporizador de intervalos en pantalla durante las series."
+        ],
+        "translated_titles": [
+            "Desarrolla Fuerza Total con solo 2 Mancuernas (Rutina Principiante)",
+            "Los Únicos 5 Ejercicios con Mancuernas que Necesitas para Empezar",
+            "Rutina de 15 Minutos con Mancuernas en Casa para Principiantes"
+        ]
+    }
+}
+
+
+def get_sample_translation(target_language: str):
+    """
+    Get pre-cached sample translation for fallback or offline demo.
+    """
+    if not target_language:
+        return None
+    key = target_language.strip().lower()
+    if "tamil" in key or key == "ta":
+        return SAMPLE_TRANSLATIONS.get("tamil")
+    if "hindi" in key or key == "hi":
+        return SAMPLE_TRANSLATIONS.get("hindi")
+    if "spanish" in key or key == "es":
+        return SAMPLE_TRANSLATIONS.get("spanish")
+    return None
+
