@@ -37,8 +37,14 @@ export default function App() {
   const [masterData, setMasterData] = useState(null);
   const [panelData, setPanelData] = useState(null);
   const [shortsData, setShortsData] = useState(null);
+  const [isGeneratingShorts, setIsGeneratingShorts] = useState(false);
+  const [shortsError, setShortsError] = useState(null);
 
-  // AI Reasoning Prompts for Modal
+  // Model & Execution Metadata
+  const [modelUsed, setModelUsed] = useState('gemini-3.8-flash');
+  const [isCached, setIsCached] = useState(false);
+
+  // AI Prompts for Modal
   const [prompts, setPrompts] = useState({});
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
 
@@ -81,7 +87,7 @@ export default function App() {
     setCurrentStep(0);
   };
 
-  // Main Submit Pipeline
+  // Main Submit Pipeline (Calls 1 & 2 only)
   const handleAnalyze = async () => {
     if (!url.trim()) return;
 
@@ -92,6 +98,7 @@ export default function App() {
     setMasterData(null);
     setPanelData(null);
     setShortsData(null);
+    setShortsError(null);
     const collectedPrompts = {};
 
     abortControllerRef.current = new AbortController();
@@ -112,6 +119,8 @@ export default function App() {
       }
 
       setMasterData(res1.data);
+      if (res1.model_used) setModelUsed(res1.model_used);
+      if (res1.is_cached !== undefined) setIsCached(res1.is_cached);
       if (res1.prompt_used) {
         collectedPrompts.call1 = res1.prompt_used;
       }
@@ -133,29 +142,8 @@ export default function App() {
         }
       }
 
-      // Step 4: Call 3 — Viral Shorts Clips suggestions
-      setCurrentStep(4);
-      try {
-        const res3 = await fetchShorts({
-          youtubeUrl: url,
-          analysisContext: res1.data.summary,
-          videoDuration,
-          category,
-          signal,
-        });
-
-        if (res3.success && res3.data) {
-          setShortsData(res3.data);
-          if (res3.prompt_used) {
-            collectedPrompts.shorts = res3.prompt_used;
-          }
-        }
-      } catch (shortsErr) {
-        console.warn('Shorts generation skipped/errored:', shortsErr);
-      }
-
       setPrompts(collectedPrompts);
-      setCurrentStep(5); // Completed!
+      setCurrentStep(4); // Completed!
     } catch (err) {
       if (err.name === 'AbortError') {
         console.log('Analysis request was aborted by user.');
@@ -166,6 +154,35 @@ export default function App() {
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+    }
+  };
+
+  // On-Demand Shorts Generation (Call 3)
+  const handleGenerateShorts = async () => {
+    if (!masterData?.summary) return;
+    setIsGeneratingShorts(true);
+    setShortsError(null);
+
+    try {
+      const res3 = await fetchShorts({
+        youtubeUrl: url,
+        analysisContext: masterData.summary,
+        videoDuration,
+        category,
+      });
+
+      if (res3.success && res3.data) {
+        setShortsData(res3.data);
+        if (res3.prompt_used) {
+          setPrompts((prev) => ({ ...prev, shorts: res3.prompt_used }));
+        }
+      } else {
+        setShortsError(res3.error || 'Failed to generate Shorts.');
+      }
+    } catch (err) {
+      setShortsError(err.message || 'Shorts extraction failed.');
+    } finally {
+      setIsGeneratingShorts(false);
     }
   };
 
@@ -196,7 +213,7 @@ export default function App() {
         onCancel={handleCancel}
       />
 
-      {/* Progressive Step Tracker (visible while analyzing) */}
+      {/* Progressive Step Tracker & Circular Loader (visible while analyzing) */}
       {isLoading && <ProgressTracker currentStep={currentStep} />}
 
       {/* Global Error Banner */}
@@ -259,11 +276,11 @@ export default function App() {
                 />
               </ErrorBoundary>
 
-              {/* Feature 3: Title & Hook Alternatives */}
-              <ErrorBoundary title="Title Alternatives">
+              {/* Feature 3: Title & Alternative Comparisons */}
+              <ErrorBoundary title="Title Comparison">
                 <TitleComparison
-                  currentAssessment={masterData.current_title_assessment}
-                  alternatives={masterData.title_alternatives}
+                  currentTitleAssessment={masterData.current_title_assessment}
+                  titleAlternatives={masterData.title_alternatives}
                   recommendedIndex={masterData.recommended_title_index}
                 />
               </ErrorBoundary>
@@ -279,15 +296,16 @@ export default function App() {
                 </ErrorBoundary>
               )}
 
-              {/* Feature 8: YouTube Shorts Candidates (Tier 3) */}
-              {shortsData && (
-                <ErrorBoundary title="Shorts Candidates">
-                  <ShortsClips
-                    clips={shortsData}
-                    onSeek={handleSeek}
-                  />
-                </ErrorBoundary>
-              )}
+              {/* Feature 8: YouTube Shorts Candidates (Tier 3 - On-Demand) */}
+              <ErrorBoundary title="Shorts Candidates">
+                <ShortsClips
+                  clips={shortsData}
+                  onSeek={handleSeek}
+                  onGenerateShorts={handleGenerateShorts}
+                  isGenerating={isGeneratingShorts}
+                  error={shortsError}
+                />
+              </ErrorBoundary>
 
               {/* Feature 7: Multilingual Translation (Tier 3) */}
               <ErrorBoundary title="Multilingual Translation">
@@ -310,10 +328,12 @@ export default function App() {
         </div>
       </div>
 
-      {/* Inspect AI Reasoning Modal */}
+      {/* Inspect AI Prompts & Scoring Modal */}
       {isPromptModalOpen && (
         <InspectReasoningModal
           prompts={prompts}
+          modelUsed={modelUsed}
+          isCached={isCached}
           onClose={() => setIsPromptModalOpen(false)}
         />
       )}

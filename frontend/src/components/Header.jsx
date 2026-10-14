@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Sparkles, Terminal } from 'lucide-react';
+import { Sparkles, Terminal } from 'lucide-react';
 
 export default function Header({ onOpenPromptModal, hasPrompts }) {
   return (
@@ -11,7 +11,7 @@ export default function Header({ onOpenPromptModal, hasPrompts }) {
         <div>
           <div className="brand-title">
             <span>HookScope</span>
-            <span className="brand-badge">Gemini 2.5 Pro</span>
+            <span className="brand-badge">Gemini 3.8 Flash</span>
           </div>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
             Explainable Video Feedback & Audience Simulation Engine • Google Cloud Run
@@ -24,10 +24,10 @@ export default function Header({ onOpenPromptModal, hasPrompts }) {
           <button
             onClick={onOpenPromptModal}
             className="btn btn-outline btn-sm"
-            title="Inspect the exact structured prompts sent to Gemini"
+            title="Inspect underlying prompts, model metadata, and scoring rubric"
           >
-            <Terminal size={14} />
-            <span>Inspect AI Reasoning</span>
+            <Terminal size={14} color="var(--primary)" />
+            <span>Inspect AI Prompts & Scoring</span>
           </button>
         )}
         <div className="btn btn-outline btn-sm" style={{ cursor: 'default', opacity: 0.85 }}>

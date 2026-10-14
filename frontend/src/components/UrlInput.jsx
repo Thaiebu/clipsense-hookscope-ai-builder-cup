@@ -67,16 +67,25 @@ export default function UrlInput({
           </div>
 
           {isLoading ? (
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={onCancel}
-              title="Cancel Analysis"
-              style={{ color: 'var(--rose)' }}
-            >
-              <XCircle size={16} />
-              <span>Cancel</span>
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <div
+                className="btn btn-primary"
+                style={{ cursor: 'wait', opacity: 0.95, pointerEvents: 'none' }}
+              >
+                <Loader2 size={16} className="spin-animation" />
+                <span>Analyzing...</span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={onCancel}
+                title="Cancel Analysis"
+                style={{ color: 'var(--rose)', borderColor: 'var(--rose)' }}
+              >
+                <XCircle size={16} />
+                <span>Cancel</span>
+              </button>
+            </div>
           ) : (
             <button
               type="submit"
@@ -88,6 +97,7 @@ export default function UrlInput({
             </button>
           )}
         </div>
+
 
         {/* 1-Click Curated Demos */}
         {samples && samples.length > 0 && (

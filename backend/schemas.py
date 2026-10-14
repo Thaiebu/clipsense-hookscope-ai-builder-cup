@@ -153,20 +153,28 @@ class PanelRequest(BaseModel):
     category: Optional[str] = Field("fitness", description="Video niche/category: 'fitness', 'tech', 'cooking', 'education', or 'general'")
 
 
+from pydantic import ConfigDict
+
 # ─── API Response Wrappers ──────────────────────────────────────────────────
 
 class AnalyzeResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     success: bool
     data: Optional[MasterAnalysisResponse] = None
     error: Optional[str] = None
-    prompt_used: Optional[str] = Field(None, description="The prompt sent to Gemini (for Inspect AI Reasoning modal)")
+    prompt_used: Optional[str] = Field(None, description="The prompt sent to Gemini (for Inspect AI Prompts & Scoring modal)")
+    model_used: Optional[str] = Field("gemini-3.8-flash", description="The underlying Gemini model used")
+    is_cached: bool = Field(False, description="Whether this response was served from pre-cached benchmark data")
 
 
 class PanelResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     success: bool
     data: Optional[AudiencePanelResponse] = None
     error: Optional[str] = None
     prompt_used: Optional[str] = None
+    model_used: Optional[str] = Field("gemini-3.8-flash", description="The underlying Gemini model used")
+    is_cached: bool = Field(False, description="Whether this response was served from pre-cached benchmark data")
 
 
 # ─── Feature 7: Multilingual Feedback (Tier 3) ──────────────────────────────
@@ -210,7 +218,10 @@ class ShortsRequest(BaseModel):
 
 
 class ShortsResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     success: bool
     data: Optional[list[ShortsClip]] = None
     error: Optional[str] = None
     prompt_used: Optional[str] = None
+    model_used: Optional[str] = Field("gemini-3.8-flash", description="The underlying Gemini model used")
+    is_cached: bool = Field(False, description="Whether this response was served from pre-cached benchmark data")

@@ -93,6 +93,55 @@ def release_inflight(key: str):
     active_requests.pop(key, None)
 
 
+# ─── Sliding Window IP Rate Limiter ──────────────────────────────────────────
+ip_request_history: dict[str, list[float]] = {}
+RATE_LIMIT_WINDOW_SECONDS = 60.0
+MAX_REQUESTS_PER_WINDOW = 25  # Max 25 requests per minute per IP
+
+
+def enforce_ip_rate_limit(request: Request):
+    """
+    Enforces sliding-window rate limit per client IP (25 requests per 60 seconds).
+    Extracts IP from X-Forwarded-For if behind a reverse proxy/Cloud Run.
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    elif request.client and request.client.host:
+        client_ip = request.client.host
+    else:
+        client_ip = "127.0.0.1"
+
+    now = time.time()
+    cutoff = now - RATE_LIMIT_WINDOW_SECONDS
+
+    # Prune old timestamps
+    timestamps = [t for t in ip_request_history.get(client_ip, []) if t > cutoff]
+
+    if len(timestamps) >= MAX_REQUESTS_PER_WINDOW:
+        retry_after = int(RATE_LIMIT_WINDOW_SECONDS - (now - timestamps[0])) + 1
+        logger.warning(f"Rate limit exceeded for client IP: {client_ip}")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded (max {MAX_REQUESTS_PER_WINDOW} req/min). Please wait {retry_after}s before trying again.",
+            headers={"Retry-After": str(max(1, retry_after))},
+        )
+
+    timestamps.append(now)
+    ip_request_history[client_ip] = timestamps
+
+
+def is_response_cached(youtube_url: str) -> bool:
+    """Helper to detect if response was served from pre-cached benchmark samples."""
+    from sample_data import get_sample_by_id_or_url
+    from gemini_service import get_gemini_client
+    if os.getenv("USE_SAMPLE_CACHE_ONLY", "false").lower() == "true":
+        return True
+    if get_gemini_client() is None and get_sample_by_id_or_url(youtube_url):
+        return True
+    return False
+
+
 # ─── Security: API Key Verification ──────────────────────────────────────────
 EXPECTED_API_KEY = os.getenv("API_KEY")
 
@@ -111,6 +160,7 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
             detail="Invalid or missing X-API-Key header",
         )
     return True
+
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -174,7 +224,7 @@ def list_samples(category: Optional[str] = Query(None, description="Optional cat
 
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
-def analyze_endpoint(payload: AnalyzeRequest, x_api_key: Optional[str] = Header(None)):
+def analyze_endpoint(payload: AnalyzeRequest, request: Request, x_api_key: Optional[str] = Header(None)):
     """
     Gemini Call 1: Runs comprehensive Master Analysis covering:
     - Summary & key extracted moments with timestamps
@@ -184,6 +234,7 @@ def analyze_endpoint(payload: AnalyzeRequest, x_api_key: Optional[str] = Header(
     - Supports dynamic category selection (fitness, tech, cooking, education, general)
     """
     verify_api_key(x_api_key)
+    enforce_ip_rate_limit(request)
 
     url = payload.youtube_url.strip()
     if not url:
@@ -204,12 +255,16 @@ def analyze_endpoint(payload: AnalyzeRequest, x_api_key: Optional[str] = Header(
             category=category_name,
         )
 
+        cached_status = is_response_cached(url)
+
         if error_msg or data is None:
             logger.error(f"Analysis failed for {url}: {error_msg}")
             return AnalyzeResponse(
                 success=False,
                 error=error_msg or "Video analysis could not be completed.",
                 prompt_used=prompt_used,
+                model_used="gemini-3.8-flash",
+                is_cached=cached_status,
             )
 
         logger.info(f"Master analysis completed successfully for: {url}")
@@ -217,13 +272,15 @@ def analyze_endpoint(payload: AnalyzeRequest, x_api_key: Optional[str] = Header(
             success=True,
             data=data,
             prompt_used=prompt_used,
+            model_used="gemini-3.8-flash",
+            is_cached=cached_status,
         )
     finally:
         release_inflight(dedup_key)
 
 
 @app.post("/api/panel", response_model=PanelResponse)
-def audience_panel_endpoint(payload: PanelRequest, x_api_key: Optional[str] = Header(None)):
+def audience_panel_endpoint(payload: PanelRequest, request: Request, x_api_key: Optional[str] = Header(None)):
     """
     Gemini Call 2: Runs Simulated Audience Panel:
     - 3 Personas tailored to the chosen category
@@ -231,6 +288,7 @@ def audience_panel_endpoint(payload: PanelRequest, x_api_key: Optional[str] = He
     - Disagreement matrix highlighting trade-offs between audiences
     """
     verify_api_key(x_api_key)
+    enforce_ip_rate_limit(request)
 
     url = payload.youtube_url.strip()
     if not url:
@@ -252,12 +310,16 @@ def audience_panel_endpoint(payload: PanelRequest, x_api_key: Optional[str] = He
             category=category_name,
         )
 
+        cached_status = is_response_cached(url)
+
         if error_msg or data is None:
             logger.error(f"Audience panel failed for {url}: {error_msg}")
             return PanelResponse(
                 success=False,
                 error=error_msg or "Audience panel simulation failed.",
                 prompt_used=prompt_used,
+                model_used="gemini-3.8-flash",
+                is_cached=cached_status,
             )
 
         logger.info(f"Audience panel completed successfully for: {url}")
@@ -265,18 +327,21 @@ def audience_panel_endpoint(payload: PanelRequest, x_api_key: Optional[str] = He
             success=True,
             data=data,
             prompt_used=prompt_used,
+            model_used="gemini-3.8-flash",
+            is_cached=cached_status,
         )
     finally:
         release_inflight(dedup_key)
 
 
 @app.post("/api/shorts", response_model=ShortsResponse)
-def shorts_endpoint(payload: ShortsRequest, x_api_key: Optional[str] = Header(None)):
+def shorts_endpoint(payload: ShortsRequest, request: Request, x_api_key: Optional[str] = Header(None)):
     """
     Feature 8 (Tier 3): YouTube Shorts Clip Suggestions.
     Identifies 2-3 viral-worthy segments (<60s) with hook captions and rationale.
     """
     verify_api_key(x_api_key)
+    enforce_ip_rate_limit(request)
 
     url = payload.youtube_url.strip()
     if not url:
@@ -298,12 +363,16 @@ def shorts_endpoint(payload: ShortsRequest, x_api_key: Optional[str] = Header(No
             category=category_name,
         )
 
+        cached_status = is_response_cached(url)
+
         if error_msg or clips is None:
             logger.error(f"Shorts generation failed for {url}: {error_msg}")
             return ShortsResponse(
                 success=False,
                 error=error_msg or "Failed to generate Shorts clips.",
                 prompt_used=prompt_used,
+                model_used="gemini-3.8-flash",
+                is_cached=cached_status,
             )
 
         logger.info(f"Shorts clips generated successfully for: {url} ({len(clips)} clips)")
@@ -311,18 +380,22 @@ def shorts_endpoint(payload: ShortsRequest, x_api_key: Optional[str] = Header(No
             success=True,
             data=clips,
             prompt_used=prompt_used,
+            model_used="gemini-3.8-flash",
+            is_cached=cached_status,
         )
     finally:
         release_inflight(dedup_key)
 
 
 @app.post("/api/translate", response_model=TranslateResponse)
-def translate_endpoint(payload: TranslateRequest, x_api_key: Optional[str] = Header(None)):
+def translate_endpoint(payload: TranslateRequest, request: Request, x_api_key: Optional[str] = Header(None)):
     """
     Feature 7 (Tier 3): Multilingual Feedback Translation.
-    Translates English summary, improvements, and title alternatives to target language (e.g. Hindi, Japanese, Spanish).
+    Translates English summary, improvements, and title alternatives to target language (e.g. Tamil, Hindi, Japanese, Spanish).
     """
     verify_api_key(x_api_key)
+    enforce_ip_rate_limit(request)
+
 
     lang = payload.target_language.strip()
     if not lang:
