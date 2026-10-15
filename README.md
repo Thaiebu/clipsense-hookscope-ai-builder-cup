@@ -412,20 +412,25 @@ docker run -p 8080:8080 --env-file ../.env video-coach-backend
 
 ### Deploy to Google Cloud Run
 ```bash
-# Set your GCP Project
-gcloud config set project YOUR_GCP_PROJECT_ID
+# Set your GCP Project ID and Region
+export PROJECT_ID="YOUR_GCP_PROJECT_ID"
+export REGION="us-central1"
 
-# Deploy directly from source
-cd backend
-gcloud run deploy video-coach-backend \
-  --source . \
-  --region asia-south1 \
-  --platform managed \
+gcloud config set project $PROJECT_ID
+
+# Deploy clipsense-backend from repo root
+gcloud run deploy clipsense-backend \
+  --source ./backend \
+  --project="$PROJECT_ID" \
+  --region="$REGION" \
   --allow-unauthenticated \
-  --timeout 300s \
-  --min-instances 1 \
-  --set-env-vars GCP_PROJECT_ID=YOUR_GCP_PROJECT_ID,GCP_REGION=asia-south1,API_KEY=YOUR_SHARED_SECRET
+  --timeout=300 \
+  --min-instances=0 \
+  --max-instances=2 \
+  --set-env-vars="GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${REGION},GEMINI_MODEL=gemini-3.8-flash,USE_SAMPLE_CACHE_ONLY=false"
 ```
+
+
 
 ---
 
