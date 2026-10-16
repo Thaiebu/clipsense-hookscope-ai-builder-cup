@@ -103,6 +103,24 @@ class MasterAnalysisResponse(BaseModel):
                 normalized.append(str(item))
         return normalized
 
+    @model_validator(mode="after")
+    def reconcile_deterministic_scores(self):
+        """
+        Guarantees 100% reproducible, explainable scoring:
+        1. hook_score = exact mathematical average of the 4 hook rubric dimensions (0-10)
+        2. readiness_score = exact sum of the 4 factor scores (0-25 each, totaling 0-100)
+        """
+        if self.hook_dimensions and len(self.hook_dimensions) > 0:
+            avg_hook = sum(d.score for d in self.hook_dimensions) / len(self.hook_dimensions)
+            self.hook_score = round(avg_hook, 1)
+
+        if self.score_factors and len(self.score_factors) > 0:
+            factor_sum = sum(f.score for f in self.score_factors)
+            self.readiness_score = max(0, min(100, factor_sum))
+
+        return self
+
+
 
 # ─── Feature 5: Audience Panel (Gemini Call 2) ──────────────────────────────
 
