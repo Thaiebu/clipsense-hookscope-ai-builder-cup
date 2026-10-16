@@ -45,18 +45,22 @@ The system dynamically adapts its rubrics and simulated audience to your video's
 
 ```mermaid
 graph TD
-    Client["Frontend (Vite + React SPA / Firebase Hosting)"] -->|POST /api/analyze (URL + Category)| API["FastAPI Backend (Google Cloud Run)"]
-    Client -->|POST /api/panel (Context + Category)| API
-    Client -->|GET /api/niches| API
-    API -->|Gemini Call 1: Master Analysis| Gemini["Gemini 2.5 Pro (Vertex AI / Google GenAI)"]
-    API -->|Gemini Call 2: Audience Panel| Gemini
-    API -->|Fallback / Fast Demos| SampleCache["Pre-cached Sample Store"]
+    Client["Frontend (React + Vite SPA on Cloud Run)"] -->|"POST /api/analyze"| API["FastAPI Backend (Google Cloud Run)"]
+    Client -->|"POST /api/panel"| API
+    Client -->|"POST /api/shorts"| API
+    Client -->|"POST /api/translate"| API
+    Client -->|"GET /api/niches"| API
+    API -->|"Call 1: Master Analysis"| Gemini["Google Gemini 3.8 Flash (Vertex AI / GenAI)"]
+    API -->|"Call 2: Audience Panel"| Gemini
+    API -->|"Call 3: Shorts & Translation"| Gemini
+    API -->|"Fallback / Benchmark Demos"| SampleCache["Pre-cached Sample Store"]
 ```
 
 - **Backend:** Python 3.11, FastAPI, Pydantic v2, `google-genai` SDK, Uvicorn
-- **AI Model:** Gemini 2.5 Pro (Vertex AI / Gemini API)
-- **Deployment:** Google Cloud Run (Containerized via Docker)
-- **Security:** `X-API-Key` header verification, CORS restriction, and in-flight request deduplication
+- **AI Model:** Google Gemini 3.8 Flash (Vertex AI / Google GenAI SDK)
+- **Deployment:** Google Cloud Run (Containerized via Docker with Nginx reverse proxy)
+- **Security:** `X-API-Key` verification, IP sliding rate limiting, in-flight deduplication
+
 
 ---
 
@@ -449,22 +453,50 @@ gcloud run deploy clipsense-backend \
 ```
 AI Builder cup/
 ├── .env.example              # Environment variables template
-├── .gitignore                # Git exclusions (venv, env secrets, pycache)
+├── .gitignore                # Git exclusions (venv, env secrets, pycache, dist)
 ├── README.md                 # Complete documentation and run guide
+├── deploy_backend.sh         # 1-Click Cloud Run backend deployment script
+├── deploy_frontend.sh        # 1-Click Cloud Run frontend deployment script
 ├── implimentation_plan.md    # 6-day competition implementation blueprint
 │
-└── backend/                  # Python FastAPI Backend
-    ├── .venv/                # Local Python virtual environment
-    ├── Dockerfile            # Container definition for Cloud Run
-    ├── requirements.txt      # Python dependencies
-    ├── main.py               # FastAPI endpoints, CORS, security, deduplication
-    ├── gemini_service.py     # Gemini 2.5 Pro orchestration service
-    ├── niches.py             # Category definitions & persona rubrics
-    ├── schemas.py            # Pydantic v2 schemas and response models
-    ├── sample_data.py        # Pre-cached sample video data
-    ├── test_backend.py       # Automated unit test suite
-    └── prompts/
-        ├── master_analysis.txt  # Call 1 prompt (Moments + Hook + Titles + Readiness)
-        ├── audience_panel.txt   # Call 2 prompt (3 Personas + Disagreements)
-        └── shorts_clips.txt     # Tier 3 prompt (YouTube Shorts clip suggestions)
+├── backend/                  # Python 3.11 FastAPI Backend
+│   ├── .venv/                # Local Python virtual environment
+│   ├── Dockerfile            # Container definition for Cloud Run
+│   ├── requirements.txt      # Python dependencies
+│   ├── main.py               # FastAPI endpoints, IP rate limiter, CORS, deduplication
+│   ├── gemini_service.py     # Gemini 3.8 Flash multi-niche orchestration & fallback
+│   ├── niches.py             # 5 Category definitions & persona rubrics
+│   ├── schemas.py            # Pydantic v2 schemas and response models
+│   ├── sample_data.py        # Pre-cached sample video data & translations
+│   ├── test_backend.py       # Automated unit test suite (11/11 passing)
+│   └── prompts/
+│       ├── master_analysis.txt  # Call 1 prompt (Moments + Hook + Titles + Readiness)
+│       ├── audience_panel.txt   # Call 2 prompt (3 Personas + Disagreements)
+│       └── shorts_clips.txt     # Tier 3 prompt (YouTube Shorts clip suggestions)
+│
+└── frontend/                 # React 19 + Vite Frontend SPA
+    ├── Dockerfile            # Multi-stage production build container
+    ├── nginx.conf            # Nginx reverse proxy configuration for Cloud Run
+    ├── package.json          # Node dependencies & build scripts
+    ├── vite.config.js        # Vite dev server configuration & local proxy
+    ├── index.html            # Main HTML entry point & typography
+    └── src/
+        ├── App.jsx           # Main state orchestration & analysis pipeline
+        ├── api.js            # Fetch client for backend endpoints with abort support
+        ├── index.css         # Cyber dark design system & micro-animations
+        └── components/
+            ├── Header.jsx                # Branding & Inspect Prompts trigger
+            ├── UrlInput.jsx              # URL input, dynamic niches, 1-click demos
+            ├── VideoPlayer.jsx           # YouTube player with cueVideoById & seek
+            ├── ProgressTracker.jsx       # Glowing circular loader with live steps
+            ├── MomentCard.jsx            # Video chapters with clickable timestamps
+            ├── HookAnalysis.jsx          # 4 Rubric dimensions with evidence badges
+            ├── TitleComparison.jsx       # Title evaluation & 3 alternatives
+            ├── ReadinessScore.jsx        # 0–100 composite score & factor breakdown
+            ├── AudiencePanel.jsx         # 3 Persona tabs & Disagreements Matrix
+            ├── ShortsClips.jsx           # Viral Shorts candidates (<60s)
+            ├── LanguageTranslate.jsx     # Multilingual feedback (Tamil, Hindi, etc.)
+            ├── InspectReasoningModal.jsx # Full transparency prompts & scoring modal
+            └── ErrorBoundary.jsx         # Isolated UI error protection boundary
 ```
+
