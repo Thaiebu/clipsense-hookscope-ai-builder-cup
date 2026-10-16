@@ -1,7 +1,7 @@
 import React from 'react';
 import { Gauge, CheckSquare, ShieldCheck } from 'lucide-react';
 
-export default function ReadinessScore({ readinessScore, scoreFactors, topImprovements }) {
+export default function ReadinessScore({ readinessScore, scoreFactors, topImprovements, isCached, modelUsed }) {
   const score = readinessScore || 0;
 
   return (
@@ -11,10 +11,20 @@ export default function ReadinessScore({ readinessScore, scoreFactors, topImprov
           <Gauge size={18} color="var(--emerald)" />
           <span>Content Readiness Score</span>
         </h3>
-        <span className="section-tag" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-          <ShieldCheck size={12} color="var(--emerald)" />
-          Engagement Rubric
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {isCached !== undefined && (
+            <span
+              className={`badge ${isCached ? 'badge-amber' : 'badge-emerald'}`}
+              style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}
+            >
+              {isCached ? '📦 Benchmark Sample' : `🟢 Live ${modelUsed || 'Gemini 3.8 Flash'}`}
+            </span>
+          )}
+          <span className="section-tag" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <ShieldCheck size={12} color="var(--emerald)" />
+            Engagement Rubric
+          </span>
+        </div>
       </div>
 
       <div className="readiness-dashboard">

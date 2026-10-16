@@ -1,7 +1,7 @@
 import React from 'react';
 import { Sparkles, Terminal } from 'lucide-react';
 
-export default function Header({ onOpenPromptModal, hasPrompts }) {
+export default function Header({ onOpenPromptModal, hasPrompts, isCached, hasAnalysis, modelUsed }) {
   return (
     <header className="app-header">
       <div className="brand-section">
@@ -20,6 +20,32 @@ export default function Header({ onOpenPromptModal, hasPrompts }) {
       </div>
 
       <div className="header-actions">
+        {hasAnalysis && isCached !== undefined && (
+          <div
+            className={`badge ${isCached ? 'badge-amber' : 'badge-emerald'}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.3rem 0.65rem',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+            }}
+          >
+            {isCached ? (
+              <>
+                <span>📦</span>
+                <span>Pre-cached Benchmark</span>
+              </>
+            ) : (
+              <>
+                <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', backgroundColor: 'var(--emerald)', boxShadow: '0 0 6px var(--emerald)' }}></span>
+                <span>Live {modelUsed || 'Gemini 3.8 Flash'}</span>
+              </>
+            )}
+          </div>
+        )}
+
         {hasPrompts && (
           <button
             onClick={onOpenPromptModal}

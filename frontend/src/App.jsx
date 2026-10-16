@@ -208,6 +208,9 @@ export default function App() {
       <Header
         onOpenPromptModal={() => setIsPromptModalOpen(true)}
         hasPrompts={Object.keys(prompts).length > 0}
+        isCached={isCached}
+        hasAnalysis={Boolean(masterData)}
+        modelUsed={modelUsed}
       />
 
       {/* Hero Video Input */}
@@ -276,6 +279,8 @@ export default function App() {
                   readinessScore={masterData.readiness_score}
                   scoreFactors={masterData.score_factors}
                   topImprovements={masterData.top_improvements}
+                  isCached={isCached}
+                  modelUsed={modelUsed}
                 />
               </ErrorBoundary>
 
