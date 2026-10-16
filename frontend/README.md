@@ -1,6 +1,8 @@
 # HookScope — Explainable Video Coach (Frontend)
 
-Modern React + Vite frontend for HookScope, powered by Google Gemini 2.5 / 3.8 on Google Cloud.
+Modern React + Vite frontend for HookScope, powered by Google Gemini 3.8 on Google Cloud Run.
+
+🌐 **Live Deployed Web App:** [https://clipsense-frontend-bjwunoxzmq-uc.a.run.app/](https://clipsense-frontend-bjwunoxzmq-uc.a.run.app/)
 
 ---
 

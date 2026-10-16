@@ -1,6 +1,10 @@
-# 🎥 Explainable Video Coach
+# 🎥 Explainable Video Coach (ClipSense)
 
-> **AI Builder Cup 2026** — An explainable AI feedback engine for YouTube creators, powered by **Google Gemini 2.5 Pro** and deployed on **Google Cloud Run**.
+> **AI Builder Cup 2026** — An explainable AI feedback engine for YouTube creators, powered by **Google Gemini 3.8 Flash** and deployed on **Google Cloud Run**.
+
+[![Live App](https://img.shields.io/badge/Live%20Demo-Google%20Cloud%20Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://clipsense-frontend-bjwunoxzmq-uc.a.run.app/)
+
+🌐 **Live Deployed Application:** [https://clipsense-frontend-bjwunoxzmq-uc.a.run.app/](https://clipsense-frontend-bjwunoxzmq-uc.a.run.app/)
 
 ---
 
@@ -430,9 +434,15 @@ gcloud run deploy clipsense-backend \
   --set-env-vars="GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${REGION},GEMINI_MODEL=gemini-3.8-flash,USE_SAMPLE_CACHE_ONLY=false"
 ```
 
+### 🌐 Live Deployed Services on Google Cloud Run
 
+| Component | Status | Live URL |
+| :--- | :--- | :--- |
+| **Frontend Web App** | 🟢 Live | **[https://clipsense-frontend-bjwunoxzmq-uc.a.run.app/](https://clipsense-frontend-bjwunoxzmq-uc.a.run.app/)** |
+| **FastAPI Backend** | 🟢 Live | `https://clipsense-backend-962363545501.us-central1.run.app/api/health` |
 
 ---
+
 
 ## 📂 Project Structure
 
