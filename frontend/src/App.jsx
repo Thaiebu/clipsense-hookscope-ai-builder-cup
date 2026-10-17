@@ -88,7 +88,7 @@ export default function App() {
   };
 
   // Main Submit Pipeline (Calls 1 & 2 only)
-  const handleAnalyze = async (overrideUrl = null, overrideCategory = null) => {
+  const handleAnalyze = async (overrideUrl = null, overrideCategory = null, overrideTitle = null) => {
     const targetUrl = (overrideUrl || url).trim();
     const targetCategory = overrideCategory || category;
     if (!targetUrl) return;
@@ -112,6 +112,7 @@ export default function App() {
       const res1 = await analyzeVideo({
         youtubeUrl: targetUrl,
         videoDuration,
+        videoTitle: overrideTitle || '',
         category: targetCategory,
         signal,
       });
@@ -162,8 +163,9 @@ export default function App() {
   // Instant 1-Click Demo Handler
   const handleSelectSample = (sample) => {
     setUrl(sample.youtube_url);
-    setCategory('fitness');
-    handleAnalyze(sample.youtube_url, 'fitness');
+    const sampleCategory = sample.category || 'fitness';
+    setCategory(sampleCategory);
+    handleAnalyze(sample.youtube_url, sampleCategory, sample.title);
   };
 
 

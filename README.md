@@ -81,16 +81,16 @@ graph TD
 
 2. Open `.env` and fill in your credentials:
    ```env
-   # Option A: Gemini Developer API Key (Easiest for quick testing)
-   GEMINI_API_KEY=your-gemini-api-key-here
-   GEMINI_MODEL=gemini-2.5-pro
-
-   # Option B: Google Cloud Vertex AI (Cloud Run production)
+   # Option A: Google Cloud Vertex AI (Cloud Run production — recommended)
    GCP_PROJECT_ID=your-gcp-project-id
-   GCP_REGION=asia-south1
+   GCP_REGION=global
+   GEMINI_MODEL=gemini-3.8-flash
 
-   # Shared Secret for Frontend-to-Backend Security (optional for local dev)
-   API_KEY=your-shared-api-key
+   # Option B: Gemini Developer API Key (Optional local testing)
+   GEMINI_API_KEY=your-gemini-api-key-here
+
+   # Public Protection (Rate limiting & in-flight deduplication active by default)
+   REQUIRE_API_KEY=false
    ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
    ```
 
@@ -137,7 +137,7 @@ The server is now live at:
 
 ## 🧪 Running Automated Tests
 
-Run the test suite to verify all endpoints, dynamic categories, schema validation, and authentication:
+Run the test suite to verify all endpoints, dynamic categories, schema validation, honest caching, title resolution, and timestamp clamping:
 
 ```bash
 cd backend
@@ -146,7 +146,7 @@ python test_backend.py
 
 **Expected output:**
 ```
-Ran 8 tests in 0.017s
+Ran 13 tests in 8.5s
 
 OK
 ```
@@ -164,7 +164,7 @@ GET /api/health
 {
   "status": "ok",
   "timestamp": 1776151440.0,
-  "model": "gemini-2.5-pro"
+  "model": "gemini-3.8-flash"
 }
 ```
 
@@ -236,6 +236,7 @@ X-API-Key: your-api-key (optional if not configured in .env)
 {
   "youtube_url": "https://www.youtube.com/watch?v=U0bhE67HuDY",
   "video_duration": 620,
+  "video_title": "5 Essential Dumbbell Exercises for Beginners | Full Body Routine",
   "category": "fitness"
 }
 ```
@@ -254,7 +255,7 @@ X-API-Key: your-api-key (optional if not configured in .env)
         "description": "Demonstrates vertical torso posture..."
       }
     ],
-    "hook_score": 8.2,
+    "hook_score": 8.5,
     "hook_dimensions": [
       {
         "name": "Clarity",
@@ -280,7 +281,9 @@ X-API-Key: your-api-key (optional if not configured in .env)
     ],
     "top_improvements": ["..."]
   },
-  "prompt_used": "You are an expert video content analyst..."
+  "prompt_used": "You are an expert video content analyst...",
+  "model_used": "gemini-3.8-flash",
+  "is_cached": false
 }
 ```
 
@@ -468,7 +471,7 @@ AI Builder cup/
 │   ├── niches.py             # 5 Category definitions & persona rubrics
 │   ├── schemas.py            # Pydantic v2 schemas and response models
 │   ├── sample_data.py        # Pre-cached sample video data & translations
-│   ├── test_backend.py       # Automated unit test suite (11/11 passing)
+│   ├── test_backend.py       # Automated unit test suite (13/13 passing)
 │   └── prompts/
 │       ├── master_analysis.txt  # Call 1 prompt (Moments + Hook + Titles + Readiness)
 │       ├── audience_panel.txt   # Call 2 prompt (3 Personas + Disagreements)

@@ -129,15 +129,17 @@ class TestBackend(unittest.TestCase):
     def test_api_key_auth(self):
         import main
         original_key = main.EXPECTED_API_KEY
+        original_req = main.REQUIRE_API_KEY
         try:
             main.EXPECTED_API_KEY = "test-secret-key-12345"
+            main.REQUIRE_API_KEY = True
 
             payload = {
                 "youtube_url": "https://www.youtube.com/watch?v=U0bhE67HuDY",
                 "video_duration": 620,
             }
 
-            # 1. No key -> 401
+            # 1. No key -> 401 when REQUIRE_API_KEY is True
             resp_no_key = self.client.post("/api/analyze", json=payload)
             self.assertEqual(resp_no_key.status_code, 401)
 
@@ -160,6 +162,58 @@ class TestBackend(unittest.TestCase):
 
         finally:
             main.EXPECTED_API_KEY = original_key
+            main.REQUIRE_API_KEY = original_req
+
+    def test_timestamp_duration_clamping(self):
+        from schemas import MasterAnalysisResponse, Moment, HookDimension, TitleAlternative, ScoreFactor
+
+        # Create response with an out-of-bounds moment (800s in a 300s video)
+        resp = MasterAnalysisResponse(
+            summary="A short video demonstration.",
+            moments=[
+                Moment(timestamp_seconds=10, title="Intro", description="Intro segment"),
+                Moment(timestamp_seconds=800, title="Out of bounds", description="Way past video end"),
+            ],
+            hook_score=8.5,
+            hook_dimensions=[
+                HookDimension(name="Clarity", score=9, timestamp_seconds=45, observation="Good", suggestion="Keep it"),
+                HookDimension(name="Curiosity", score=8, timestamp_seconds=5, observation="Hook", suggestion="Good"),
+                HookDimension(name="Pacing", score=8, timestamp_seconds=15, observation="Fast", suggestion="Good"),
+                HookDimension(name="Payoff Promise", score=9, timestamp_seconds=20, observation="Clear", suggestion="Good"),
+            ],
+            current_title_assessment="Decent title",
+            title_alternatives=[
+                TitleAlternative(title="Alt 1", strengths="Clear", weaknesses="None", rubric_score=8),
+                TitleAlternative(title="Alt 2", strengths="Engaging", weaknesses="None", rubric_score=9),
+                TitleAlternative(title="Alt 3", strengths="Catchy", weaknesses="None", rubric_score=8),
+            ],
+            recommended_title_index=1,
+            readiness_score=85,
+            score_factors=[
+                ScoreFactor(name="Hook Strength", score=22, evidence="Strong"),
+                ScoreFactor(name="Content Structure", score=21, evidence="Solid"),
+                ScoreFactor(name="Pacing", score=21, evidence="Good"),
+                ScoreFactor(name="Title Fit", score=21, evidence="Accurate"),
+            ],
+            top_improvements=["Shorten intro", "Add visual cues", "Clearer outro"],
+        )
+
+        resp.clamp_to_duration(300)
+        # Moment 800s must be clamped to 300s
+        self.assertEqual(resp.moments[1].timestamp_seconds, 300)
+        # Hook dimension at 45s must be clamped to min(300, 30) = 30s
+        self.assertEqual(resp.hook_dimensions[0].timestamp_seconds, 30)
+
+    def test_resolve_video_title(self):
+        from main import resolve_video_title
+
+        # 1. Provided title
+        title1 = resolve_video_title("https://www.youtube.com/watch?v=123", "My Real Workout Title")
+        self.assertEqual(title1, "My Real Workout Title")
+
+        # 2. Known sample URL
+        title2 = resolve_video_title("https://www.youtube.com/watch?v=U0bhE67HuDY")
+        self.assertEqual(title2, "5 Essential Dumbbell Exercises for Beginners | Full Body Routine")
 
     def test_shorts_endpoint_sample_success(self):
         payload = {

@@ -120,6 +120,16 @@ class MasterAnalysisResponse(BaseModel):
 
         return self
 
+    def clamp_to_duration(self, max_duration: Optional[int]):
+        """Clamps moments and hook timestamps to not exceed actual video duration."""
+        if not max_duration or max_duration <= 0:
+            return
+        for m in self.moments:
+            m.timestamp_seconds = max(0, min(m.timestamp_seconds, max_duration))
+        for h in self.hook_dimensions:
+            # Hooks are in the opening segment (first 30s or video duration)
+            h.timestamp_seconds = max(0, min(h.timestamp_seconds, min(max_duration, 30)))
+
 
 
 # ─── Feature 5: Audience Panel (Gemini Call 2) ──────────────────────────────
@@ -155,12 +165,25 @@ class AudiencePanelResponse(BaseModel):
     panel_reactions: list[PanelPersona] = Field(..., description="Reactions from each persona")
     disagreements: list[Disagreement] = Field(..., description="Moments where personas disagree")
 
+    def clamp_to_duration(self, max_duration: Optional[int]):
+        """Clamps audience reaction and disagreement timestamps to video duration."""
+        if not max_duration or max_duration <= 0:
+            return
+        for p in self.panel_reactions:
+            for r in p.highlights:
+                r.timestamp_seconds = max(0, min(r.timestamp_seconds, max_duration))
+            for r in p.concerns:
+                r.timestamp_seconds = max(0, min(r.timestamp_seconds, max_duration))
+        for d in self.disagreements:
+            d.timestamp_seconds = max(0, min(d.timestamp_seconds, max_duration))
+
 
 # ─── API Request Models ─────────────────────────────────────────────────────
 
 class AnalyzeRequest(BaseModel):
     youtube_url: str = Field(..., description="Full YouTube URL to analyze")
     video_duration: Optional[int] = Field(None, ge=0, description="Video duration in seconds from frontend player")
+    video_title: Optional[str] = Field(None, description="Video title extracted from YouTube player or oEmbed")
     category: Optional[str] = Field("fitness", description="Video niche/category: 'fitness', 'tech', 'cooking', 'education', or 'general'")
 
 
@@ -226,6 +249,14 @@ class ShortsClip(BaseModel):
     title: str = Field(..., description="Punchy, click-worthy Shorts clip title")
     hook_caption: str = Field(..., description="On-screen text caption for the first 3 seconds of the Short")
     reason_standalone: str = Field(..., description="Why this exact segment works as an independent viral Short")
+
+    def clamp_to_duration(self, max_duration: Optional[int]):
+        """Clamps start and end seconds so clip falls within video duration and strictly <60s."""
+        if not max_duration or max_duration <= 0:
+            return
+        self.start_seconds = max(0, min(self.start_seconds, max(0, max_duration - 5)))
+        self.end_seconds = max(self.start_seconds + 5, min(self.end_seconds, max_duration))
+        self.duration_seconds = max(5, min(60, self.end_seconds - self.start_seconds))
 
 
 class ShortsRequest(BaseModel):

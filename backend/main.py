@@ -54,7 +54,7 @@ logger = logging.getLogger("video_coach.api")
 
 app = FastAPI(
     title="Explainable Video Coach API",
-    description="Multi-niche video feedback & simulated audience panel powered by Gemini 2.5 Pro",
+    description="Multi-niche video feedback & simulated audience panel powered by Google Gemini 3.8 Flash",
     version="1.1.0",
 )
 
@@ -131,27 +131,55 @@ def enforce_ip_rate_limit(request: Request):
     ip_request_history[client_ip] = timestamps
 
 
-def is_response_cached(youtube_url: str) -> bool:
-    """Helper to detect if response was served from pre-cached benchmark samples."""
+def resolve_video_title(youtube_url: str, client_title: Optional[str] = None) -> str:
+    """
+    Resolves the actual video title:
+    1. If client provided a meaningful title (not empty and not 'YouTube Video'), use it.
+    2. Check if URL matches a curated benchmark sample and use its known title.
+    3. Query YouTube's public, unauthenticated oEmbed endpoint.
+    4. Fall back to 'YouTube Video'.
+    """
+    if client_title and client_title.strip() and client_title.strip() != "YouTube Video":
+        return client_title.strip()
+
     from sample_data import get_sample_by_id_or_url
-    from gemini_service import get_gemini_client
-    if os.getenv("USE_SAMPLE_CACHE_ONLY", "false").lower() == "true":
-        return True
-    if get_gemini_client() is None and get_sample_by_id_or_url(youtube_url):
-        return True
-    return False
+    sample = get_sample_by_id_or_url(youtube_url)
+    if sample and sample.get("title"):
+        return sample["title"]
+
+    try:
+        import urllib.parse
+        import urllib.request
+        import json
+
+        encoded_url = urllib.parse.quote(youtube_url, safe="")
+        oembed_url = f"https://www.youtube.com/oembed?url={encoded_url}&format=json"
+        req = urllib.request.Request(oembed_url, headers={"User-Agent": "ClipSense/1.1"})
+        with urllib.request.urlopen(req, timeout=1.8) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                title = data.get("title", "").strip()
+                if title:
+                    logger.info(f"Resolved YouTube video title via oEmbed: {title}")
+                    return title
+    except Exception as e:
+        logger.debug(f"Could not resolve video title via oEmbed: {e}")
+
+    return "YouTube Video"
 
 
-# ─── Security: API Key Verification ──────────────────────────────────────────
+# ─── Security: API Protection ───────────────────────────────────────────────
 EXPECTED_API_KEY = os.getenv("API_KEY")
+REQUIRE_API_KEY = os.getenv("REQUIRE_API_KEY", "false").lower() == "true"
 
 
 def verify_api_key(x_api_key: Optional[str] = Header(None)):
     """
-    Validate X-API-Key header if API_KEY is set in environment.
-    If API_KEY is not configured, bypasses check for simple local development.
+    Validate X-API-Key header if REQUIRE_API_KEY is explicitly enabled in environment.
+    By default, public access is protected via IP sliding-window rate limiting,
+    in-flight request deduplication, payload validation, and Cloud Run concurrency caps.
     """
-    if not EXPECTED_API_KEY:
+    if not REQUIRE_API_KEY or not EXPECTED_API_KEY:
         return True
     if not x_api_key or x_api_key != EXPECTED_API_KEY:
         logger.warning("Unauthorized access attempt: invalid or missing X-API-Key")
@@ -248,14 +276,16 @@ def analyze_endpoint(payload: AnalyzeRequest, request: Request, x_api_key: Optio
 
     try:
         category_name = payload.category or "fitness"
-        logger.info(f"Starting master analysis for: {url} (niche={category_name})")
-        data, prompt_used, error_msg = analyze_video(
+        video_title = resolve_video_title(url, payload.video_title)
+        logger.info(f"Starting master analysis for: {url} (title='{video_title}', niche={category_name})")
+        data, prompt_used, error_msg, result_source = analyze_video(
             youtube_url=url,
             video_duration=payload.video_duration,
+            video_title=video_title,
             category=category_name,
         )
 
-        cached_status = is_response_cached(url)
+        cached_status = (result_source == "sample_cache")
 
         if error_msg or data is None:
             logger.error(f"Analysis failed for {url}: {error_msg}")
@@ -267,7 +297,7 @@ def analyze_endpoint(payload: AnalyzeRequest, request: Request, x_api_key: Optio
                 is_cached=cached_status,
             )
 
-        logger.info(f"Master analysis completed successfully for: {url}")
+        logger.info(f"Master analysis completed successfully for: {url} (source={result_source})")
         return AnalyzeResponse(
             success=True,
             data=data,
@@ -303,14 +333,14 @@ def audience_panel_endpoint(payload: PanelRequest, request: Request, x_api_key: 
     try:
         category_name = payload.category or "fitness"
         logger.info(f"Starting audience panel analysis for: {url} (niche={category_name})")
-        data, prompt_used, error_msg = analyze_audience_panel(
+        data, prompt_used, error_msg, result_source = analyze_audience_panel(
             youtube_url=url,
             analysis_context=payload.analysis_context,
             video_duration=payload.video_duration,
             category=category_name,
         )
 
-        cached_status = is_response_cached(url)
+        cached_status = (result_source == "sample_cache")
 
         if error_msg or data is None:
             logger.error(f"Audience panel failed for {url}: {error_msg}")
@@ -322,7 +352,7 @@ def audience_panel_endpoint(payload: PanelRequest, request: Request, x_api_key: 
                 is_cached=cached_status,
             )
 
-        logger.info(f"Audience panel completed successfully for: {url}")
+        logger.info(f"Audience panel completed successfully for: {url} (source={result_source})")
         return PanelResponse(
             success=True,
             data=data,
@@ -356,14 +386,14 @@ def shorts_endpoint(payload: ShortsRequest, request: Request, x_api_key: Optiona
     try:
         category_name = payload.category or "fitness"
         logger.info(f"Starting Shorts clip generation for: {url} (niche={category_name})")
-        clips, prompt_used, error_msg = generate_shorts_clips(
+        clips, prompt_used, error_msg, result_source = generate_shorts_clips(
             youtube_url=url,
             analysis_context=payload.analysis_context,
             video_duration=payload.video_duration,
             category=category_name,
         )
 
-        cached_status = is_response_cached(url)
+        cached_status = (result_source == "sample_cache")
 
         if error_msg or clips is None:
             logger.error(f"Shorts generation failed for {url}: {error_msg}")
@@ -375,7 +405,7 @@ def shorts_endpoint(payload: ShortsRequest, request: Request, x_api_key: Optiona
                 is_cached=cached_status,
             )
 
-        logger.info(f"Shorts clips generated successfully for: {url} ({len(clips)} clips)")
+        logger.info(f"Shorts clips generated successfully for: {url} ({len(clips)} clips, source={result_source})")
         return ShortsResponse(
             success=True,
             data=clips,

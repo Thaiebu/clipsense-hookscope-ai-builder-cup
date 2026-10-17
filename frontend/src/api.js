@@ -4,16 +4,15 @@
  */
 
 const API_BASE = import.meta.env.VITE_API_URL !== undefined ? import.meta.env.VITE_API_URL : '';
-const API_KEY = import.meta.env.VITE_API_KEY || '';
 
 /**
- * Helper for making authenticated requests to the backend.
+ * Helper for making requests to the backend.
+ * Protected via backend rate-limiting, request deduplication, and Cloud Run proxy.
  */
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const headers = {
     'Content-Type': 'application/json',
-    ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
     ...(options.headers || {}),
   };
 
@@ -62,13 +61,14 @@ export async function fetchSamples(category = null) {
 /**
  * Call 1: Master Video Analysis (Summary, Moments, Hook Rubric, Titles, Readiness).
  */
-export async function analyzeVideo({ youtubeUrl, videoDuration, category = 'fitness', signal }) {
+export async function analyzeVideo({ youtubeUrl, videoDuration, videoTitle, category = 'fitness', signal }) {
   return request('/api/analyze', {
     method: 'POST',
     signal,
     body: JSON.stringify({
       youtube_url: youtubeUrl,
       video_duration: videoDuration || 0,
+      video_title: videoTitle || '',
       category,
     }),
   });

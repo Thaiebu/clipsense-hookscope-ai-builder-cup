@@ -1,12 +1,14 @@
 """
-Gemini 2.5 Pro Service for Explainable Video Coach.
-Handles both Gemini Call 1 (Master Analysis) and Gemini Call 2 (Audience Panel).
+Gemini 3.8 Flash Service for Explainable Video Coach.
+Handles Gemini Call 1 (Master Analysis), Gemini Call 2 (Audience Panel), and Call 3 (Shorts & Translation).
 Supports:
 - Dynamic niche adaptation (Fitness, Tech, Cooking, Education, General)
-- google-genai SDK (Vertex AI or Gemini Developer API)
+- google-genai SDK (Vertex AI with global endpoint or Gemini Developer API)
 - Robust JSON response extraction & Pydantic schema validation
 - Automatic fallback to high-fidelity pre-cached samples for demo resilience
 - Returning exact prompt_used for the "Inspect AI Reasoning" modal
+- Honest result_source tracking ("live_model" vs "sample_cache")
+- Strict duration timestamp bounds checking
 """
 
 import json
@@ -52,27 +54,28 @@ def load_prompt_template(filename: str) -> str:
 def get_gemini_client():
     """
     Initialize Google GenAI client based on environment variables.
-    Supports either Gemini Developer API (GEMINI_API_KEY) or Vertex AI (GCP_PROJECT_ID).
+    Prioritizes Vertex AI (GCP_PROJECT_ID) with global location for Gemini 3.8 Flash,
+    falling back to Gemini Developer API (GEMINI_API_KEY) if configured.
     """
     try:
         from google import genai
 
         api_key = os.getenv("GEMINI_API_KEY")
         gcp_project = os.getenv("GCP_PROJECT_ID")
-        gcp_region = os.getenv("GCP_REGION", "asia-south1")
+        gcp_region = os.getenv("GCP_REGION", "global")
 
         # Ignore placeholder template strings
         if gcp_project and "your-gcp-project-id" in gcp_project.lower():
             gcp_project = None
 
-        if api_key and api_key.strip():
-            logger.info("Initializing Google GenAI client with GEMINI_API_KEY")
-            return genai.Client(api_key=api_key.strip())
-        elif gcp_project and gcp_project.strip():
+        if gcp_project and gcp_project.strip():
             logger.info(f"Initializing Google GenAI client via Vertex AI (project={gcp_project}, location={gcp_region})")
             return genai.Client(vertexai=True, project=gcp_project.strip(), location=gcp_region)
+        elif api_key and api_key.strip():
+            logger.info("Initializing Google GenAI client with GEMINI_API_KEY")
+            return genai.Client(api_key=api_key.strip())
         else:
-            logger.warning("No explicit GEMINI_API_KEY or GCP_PROJECT_ID found")
+            logger.warning("No explicit GCP_PROJECT_ID or GEMINI_API_KEY found")
             return None
     except Exception as e:
         logger.warning(f"Could not initialize Google GenAI Client: {e}. Will use sample fallback if requested.")
@@ -107,20 +110,21 @@ def analyze_video(
     video_duration: Optional[int] = None,
     video_title: Optional[str] = None,
     category: Optional[str] = "fitness",
-) -> Tuple[Optional[MasterAnalysisResponse], Optional[str], Optional[str]]:
+) -> Tuple[Optional[MasterAnalysisResponse], Optional[str], Optional[str], str]:
     """
     Gemini Call 1: Master Video Analysis (Features 1-4).
     Dynamically adapts analysis to specified video category.
-    Returns (data, prompt_used, error_message).
+    Returns (data, prompt_used, error_message, result_source).
+    result_source is either 'live_model' or 'sample_cache'.
     """
     duration_val = video_duration if video_duration and video_duration > 0 else 600
     title_val = video_title.strip() if video_title and video_title.strip() else "YouTube Video"
     niche = get_niche(category)
 
-    # 1. Check if this is one of our pre-cached sample videos
+    # 1. Check if this is one of our pre-cached sample videos (forced cache mode)
     sample_match = get_sample_by_id_or_url(youtube_url)
     if os.getenv("USE_SAMPLE_CACHE_ONLY", "false").lower() == "true" and sample_match:
-        logger.info(f"Using pre-cached sample data for {youtube_url}")
+        logger.info(f"Using pre-cached sample data for {youtube_url} (USE_SAMPLE_CACHE_ONLY=true)")
         prompt_template = load_prompt_template("master_analysis.txt")
         prompt_used = prompt_template.format(
             youtube_url=sample_match["youtube_url"],
@@ -129,7 +133,9 @@ def analyze_video(
             category_name=niche["display_name"],
             niche_description=niche["description"],
         )
-        return MasterAnalysisResponse.model_validate(sample_match["analysis"]), prompt_used, None
+        data = MasterAnalysisResponse.model_validate(sample_match["analysis"])
+        data.clamp_to_duration(duration_val)
+        return data, prompt_used, None, "sample_cache"
 
     # 2. Build Prompt
     try:
@@ -142,15 +148,17 @@ def analyze_video(
             niche_description=niche["description"],
         )
     except Exception as e:
-        return None, None, f"Failed to load prompt template: {str(e)}"
+        return None, None, f"Failed to load prompt template: {str(e)}", "live_model"
 
     # 3. Call Gemini
     client = get_gemini_client()
     if client is None:
         if sample_match:
             logger.info("Gemini client unavailable, falling back to matched sample cache")
-            return MasterAnalysisResponse.model_validate(sample_match["analysis"]), prompt_used, None
-        return None, prompt_used, "Gemini client not initialized. Please configure API_KEY or GCP_PROJECT_ID."
+            data = MasterAnalysisResponse.model_validate(sample_match["analysis"])
+            data.clamp_to_duration(duration_val)
+            return data, prompt_used, None, "sample_cache"
+        return None, prompt_used, "Gemini client not initialized. Please configure GCP_PROJECT_ID or GEMINI_API_KEY.", "live_model"
 
     try:
         logger.info(f"Calling Gemini ({DEFAULT_MODEL}) for master analysis ({niche['display_name']}): {youtube_url}")
@@ -168,8 +176,8 @@ def analyze_video(
 
         contents.append(prompt_used)
 
+        # For Gemini 3.8 Flash, sampling parameters (temperature, top_p) are deprecated.
         config = types.GenerateContentConfig(
-            temperature=0.2,
             max_output_tokens=8192,
             response_mime_type="application/json",
         )
@@ -183,14 +191,17 @@ def analyze_video(
         raw_text = response.text or ""
         parsed_json = extract_json_from_text(raw_text)
         validated_data = MasterAnalysisResponse.model_validate(parsed_json)
-        return validated_data, prompt_used, None
+        validated_data.clamp_to_duration(duration_val)
+        return validated_data, prompt_used, None, "live_model"
 
     except Exception as e:
         logger.error(f"Gemini API error during master analysis: {e}")
         if sample_match:
             logger.warning("Falling back to pre-cached sample due to Gemini error")
-            return MasterAnalysisResponse.model_validate(sample_match["analysis"]), prompt_used, None
-        return None, prompt_used, f"Analysis failed: {str(e)}"
+            data = MasterAnalysisResponse.model_validate(sample_match["analysis"])
+            data.clamp_to_duration(duration_val)
+            return data, prompt_used, None, "sample_cache"
+        return None, prompt_used, f"Analysis failed: {str(e)}", "live_model"
 
 
 def analyze_audience_panel(
@@ -198,21 +209,21 @@ def analyze_audience_panel(
     analysis_context: Optional[str] = None,
     video_duration: Optional[int] = None,
     category: Optional[str] = "fitness",
-) -> Tuple[Optional[AudiencePanelResponse], Optional[str], Optional[str]]:
+) -> Tuple[Optional[AudiencePanelResponse], Optional[str], Optional[str], str]:
     """
     Gemini Call 2: Simulated Audience Panel (Feature 5).
     Dynamically tailors 3 personas and disagreement dimensions to the selected category.
-    Returns (data, prompt_used, error_message).
+    Returns (data, prompt_used, error_message, result_source).
     """
     duration_val = video_duration if video_duration and video_duration > 0 else 600
     niche = get_niche(category)
     personas_section = format_persona_prompt_section(niche)
     context_val = (analysis_context or "").strip() or f"Instructional breakdown and demonstrations in {niche['display_name']} video: {youtube_url}"
 
-    # 1. Check if this is one of our pre-cached sample videos
+    # 1. Check if this is one of our pre-cached sample videos (forced cache mode)
     sample_match = get_sample_by_id_or_url(youtube_url)
     if os.getenv("USE_SAMPLE_CACHE_ONLY", "false").lower() == "true" and sample_match:
-        logger.info(f"Using pre-cached audience panel data for {youtube_url}")
+        logger.info(f"Using pre-cached audience panel data for {youtube_url} (USE_SAMPLE_CACHE_ONLY=true)")
         prompt_template = load_prompt_template("audience_panel.txt")
         prompt_used = prompt_template.format(
             youtube_url=sample_match["youtube_url"],
@@ -221,7 +232,9 @@ def analyze_audience_panel(
             category_name=niche["display_name"],
             personas_section=personas_section,
         )
-        return AudiencePanelResponse.model_validate(sample_match["panel"]), prompt_used, None
+        data = AudiencePanelResponse.model_validate(sample_match["panel"])
+        data.clamp_to_duration(duration_val)
+        return data, prompt_used, None, "sample_cache"
 
     # 2. Build Prompt
     try:
@@ -234,15 +247,17 @@ def analyze_audience_panel(
             personas_section=personas_section,
         )
     except Exception as e:
-        return None, None, f"Failed to load audience panel prompt template: {str(e)}"
+        return None, None, f"Failed to load audience panel prompt template: {str(e)}", "live_model"
 
     # 3. Call Gemini
     client = get_gemini_client()
     if client is None:
         if sample_match:
             logger.info("Gemini client unavailable, falling back to matched sample panel")
-            return AudiencePanelResponse.model_validate(sample_match["panel"]), prompt_used, None
-        return None, prompt_used, "Gemini client not initialized. Please configure API_KEY or GCP_PROJECT_ID."
+            data = AudiencePanelResponse.model_validate(sample_match["panel"])
+            data.clamp_to_duration(duration_val)
+            return data, prompt_used, None, "sample_cache"
+        return None, prompt_used, "Gemini client not initialized. Please configure GCP_PROJECT_ID or GEMINI_API_KEY.", "live_model"
 
     try:
         logger.info(f"Calling Gemini ({DEFAULT_MODEL}) for audience panel ({niche['display_name']}): {youtube_url}")
@@ -260,7 +275,6 @@ def analyze_audience_panel(
         contents.append(prompt_used)
 
         config = types.GenerateContentConfig(
-            temperature=0.3,
             max_output_tokens=8192,
             response_mime_type="application/json",
         )
@@ -286,14 +300,17 @@ def analyze_audience_panel(
                         d["home_viewer"] = d["persona_3"]
 
         validated_data = AudiencePanelResponse.model_validate(parsed_json)
-        return validated_data, prompt_used, None
+        validated_data.clamp_to_duration(duration_val)
+        return validated_data, prompt_used, None, "live_model"
 
     except Exception as e:
         logger.error(f"Gemini API error during audience panel: {e}")
         if sample_match:
             logger.warning("Falling back to pre-cached sample panel due to Gemini error")
-            return AudiencePanelResponse.model_validate(sample_match["panel"]), prompt_used, None
-        return None, prompt_used, f"Audience panel generation failed: {str(e)}"
+            data = AudiencePanelResponse.model_validate(sample_match["panel"])
+            data.clamp_to_duration(duration_val)
+            return data, prompt_used, None, "sample_cache"
+        return None, prompt_used, f"Audience panel generation failed: {str(e)}", "live_model"
 
 
 def generate_shorts_clips(
@@ -301,10 +318,10 @@ def generate_shorts_clips(
     analysis_context: Optional[str] = None,
     video_duration: Optional[int] = None,
     category: Optional[str] = "fitness",
-) -> Tuple[Optional[list[ShortsClip]], Optional[str], Optional[str]]:
+) -> Tuple[Optional[list[ShortsClip]], Optional[str], Optional[str], str]:
     """
     Feature 8 (Tier 3): Identifies 2-3 viral-worthy Shorts clips (<60s) with timestamps, titles, and hook captions.
-    Returns (clips, prompt_used, error_message).
+    Returns (clips, prompt_used, error_message, result_source).
     """
     duration_val = video_duration if video_duration and video_duration > 0 else 600
     niche = get_niche(category)
@@ -313,7 +330,7 @@ def generate_shorts_clips(
     # 1. Check pre-cached sample fallback
     sample_match = get_sample_by_id_or_url(youtube_url)
     if os.getenv("USE_SAMPLE_CACHE_ONLY", "false").lower() == "true" and sample_match and "shorts" in sample_match:
-        logger.info(f"Using pre-cached shorts clips for {youtube_url}")
+        logger.info(f"Using pre-cached shorts clips for {youtube_url} (USE_SAMPLE_CACHE_ONLY=true)")
         prompt_template = load_prompt_template("shorts_clips.txt")
         prompt_used = prompt_template.format(
             youtube_url=sample_match["youtube_url"],
@@ -322,7 +339,9 @@ def generate_shorts_clips(
             category_name=niche["display_name"],
         )
         clips = [ShortsClip.model_validate(c) for c in sample_match["shorts"]]
-        return clips, prompt_used, None
+        for c in clips:
+            c.clamp_to_duration(duration_val)
+        return clips, prompt_used, None, "sample_cache"
 
     # 2. Build prompt
     try:
@@ -334,7 +353,7 @@ def generate_shorts_clips(
             category_name=niche["display_name"],
         )
     except Exception as e:
-        return None, None, f"Failed to load shorts prompt template: {str(e)}"
+        return None, None, f"Failed to load shorts prompt template: {str(e)}", "live_model"
 
     # 3. Call Gemini
     client = get_gemini_client()
@@ -342,8 +361,10 @@ def generate_shorts_clips(
         if sample_match and "shorts" in sample_match:
             logger.info("Gemini client unavailable, falling back to matched sample shorts")
             clips = [ShortsClip.model_validate(c) for c in sample_match["shorts"]]
-            return clips, prompt_used, None
-        return None, prompt_used, "Gemini client not initialized. Please configure API_KEY or GCP_PROJECT_ID."
+            for c in clips:
+                c.clamp_to_duration(duration_val)
+            return clips, prompt_used, None, "sample_cache"
+        return None, prompt_used, "Gemini client not initialized. Please configure GCP_PROJECT_ID or GEMINI_API_KEY.", "live_model"
 
     try:
         logger.info(f"Calling Gemini ({DEFAULT_MODEL}) for shorts clip suggestions: {youtube_url}")
@@ -361,7 +382,6 @@ def generate_shorts_clips(
         contents.append(prompt_used)
 
         config = types.GenerateContentConfig(
-            temperature=0.3,
             max_output_tokens=4096,
             response_mime_type="application/json",
         )
@@ -376,35 +396,37 @@ def generate_shorts_clips(
         parsed_json = extract_json_from_text(raw_text)
 
         if not isinstance(parsed_json, list):
-            # If wrapped in an object e.g. {"clips": [...]}
             if isinstance(parsed_json, dict) and "clips" in parsed_json:
                 parsed_json = parsed_json["clips"]
             else:
                 parsed_json = [parsed_json]
 
-        # Enforce duration constraints on clips (<60s)
+        # Enforce duration constraints on clips (<60s and <= video_duration)
         clips = []
         for item in parsed_json:
             if isinstance(item, dict):
                 start = int(item.get("start_seconds", 0))
                 end = int(item.get("end_seconds", start + 30))
-                # Clamp end if exceeds 60s
                 if end - start > 59:
                     end = start + 55
                 item["start_seconds"] = start
                 item["end_seconds"] = end
-                item["duration_seconds"] = end - start
-                clips.append(ShortsClip.model_validate(item))
+                item["duration_seconds"] = max(5, end - start)
+                clip_obj = ShortsClip.model_validate(item)
+                clip_obj.clamp_to_duration(duration_val)
+                clips.append(clip_obj)
 
-        return clips, prompt_used, None
+        return clips, prompt_used, None, "live_model"
 
     except Exception as e:
         logger.error(f"Gemini API error during shorts generation: {e}")
         if sample_match and "shorts" in sample_match:
             logger.warning("Falling back to pre-cached shorts due to Gemini error")
             clips = [ShortsClip.model_validate(c) for c in sample_match["shorts"]]
-            return clips, prompt_used, None
-        return None, prompt_used, f"Shorts clip generation failed: {str(e)}"
+            for c in clips:
+                c.clamp_to_duration(duration_val)
+            return clips, prompt_used, None, "sample_cache"
+        return None, prompt_used, f"Shorts clip generation failed: {str(e)}", "live_model"
 
 
 def translate_feedback(
@@ -451,7 +473,7 @@ def translate_feedback(
         if cached:
             logger.warning(f"Gemini client not initialized, using pre-cached {target_lang_name} translation fallback.")
             return TranslatedData.model_validate(cached), None
-        return None, "Gemini client not initialized. Please configure API_KEY or GCP_PROJECT_ID."
+        return None, "Gemini client not initialized. Please configure GCP_PROJECT_ID or GEMINI_API_KEY."
 
     prompt = f"""You are a professional multilingual translator specializing in video coaching and creator content.
 
@@ -479,7 +501,6 @@ CRITICAL RULES:
 """
     try:
         config = types.GenerateContentConfig(
-            temperature=0.1,
             max_output_tokens=2048,
             response_mime_type="application/json",
         )
