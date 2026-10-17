@@ -88,10 +88,22 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
 # 7. Deploy to Google Cloud Run
 echo -e "\n${BOLD}${CYAN}🚢 Deploying ${SERVICE_NAME} to Google Cloud Run (${REGION})...${RESET}"
 
+# Extract GEMINI_API_KEY directly if not exported
+if [ -z "${GEMINI_API_KEY:-}" ]; then
+  if [ -f "${SCRIPT_DIR}/backend/.env" ]; then
+    GEMINI_API_KEY="$(grep -E '^GEMINI_API_KEY=' "${SCRIPT_DIR}/backend/.env" | cut -d '=' -f2- | tr -d ' "\r\n' || true)"
+  elif [ -f "${SCRIPT_DIR}/.env" ]; then
+    GEMINI_API_KEY="$(grep -E '^GEMINI_API_KEY=' "${SCRIPT_DIR}/.env" | cut -d '=' -f2- | tr -d ' "\r\n' || true)"
+  fi
+fi
+
 # Build env vars string
-ENV_VARS="GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${REGION},GEMINI_MODEL=${MODEL},USE_SAMPLE_CACHE_ONLY=false"
+ENV_VARS="GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=global,GEMINI_MODEL=${MODEL},USE_SAMPLE_CACHE_ONLY=false"
 if [ -n "${GEMINI_API_KEY:-}" ]; then
+  echo -e "   • Gemini API Key:   ${GREEN}Configured (${#GEMINI_API_KEY} chars)${RESET}"
   ENV_VARS="${ENV_VARS},GEMINI_API_KEY=${GEMINI_API_KEY}"
+else
+  echo -e "   • Gemini API Key:   ${YELLOW}Not found (falling back to Vertex AI ADC)${RESET}"
 fi
 
 gcloud run deploy "${SERVICE_NAME}" \

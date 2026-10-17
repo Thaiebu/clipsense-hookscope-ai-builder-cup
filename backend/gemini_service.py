@@ -54,8 +54,8 @@ def load_prompt_template(filename: str) -> str:
 def get_gemini_client():
     """
     Initialize Google GenAI client based on environment variables.
-    Prioritizes Vertex AI (GCP_PROJECT_ID) with global location for Gemini 3.8 Flash,
-    falling back to Gemini Developer API (GEMINI_API_KEY) if configured.
+    Prioritizes Gemini Developer API (GEMINI_API_KEY) for direct Google AI Studio access,
+    or Vertex AI (GCP_PROJECT_ID) when running in full GCP enterprise environments.
     """
     try:
         from google import genai
@@ -68,14 +68,14 @@ def get_gemini_client():
         if gcp_project and "your-gcp-project-id" in gcp_project.lower():
             gcp_project = None
 
-        if gcp_project and gcp_project.strip():
+        if api_key and api_key.strip():
+            logger.info("Initializing Google GenAI client with GEMINI_API_KEY (AI Studio / GenAI endpoint)")
+            return genai.Client(api_key=api_key.strip())
+        elif gcp_project and gcp_project.strip():
             logger.info(f"Initializing Google GenAI client via Vertex AI (project={gcp_project}, location={gcp_region})")
             return genai.Client(vertexai=True, project=gcp_project.strip(), location=gcp_region)
-        elif api_key and api_key.strip():
-            logger.info("Initializing Google GenAI client with GEMINI_API_KEY")
-            return genai.Client(api_key=api_key.strip())
         else:
-            logger.warning("No explicit GCP_PROJECT_ID or GEMINI_API_KEY found")
+            logger.warning("No explicit GEMINI_API_KEY or GCP_PROJECT_ID found")
             return None
     except Exception as e:
         logger.warning(f"Could not initialize Google GenAI Client: {e}. Will use sample fallback if requested.")

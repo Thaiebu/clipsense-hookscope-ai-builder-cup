@@ -1,7 +1,16 @@
 import React from 'react';
 import { Type, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 
-export default function TitleComparison({ currentAssessment, alternatives, recommendedIndex }) {
+export default function TitleComparison({
+  currentAssessment,
+  currentTitleAssessment,
+  alternatives,
+  titleAlternatives,
+  recommendedIndex = 0,
+}) {
+  const assessment = currentAssessment || currentTitleAssessment;
+  const list = alternatives || titleAlternatives || [];
+
   return (
     <div className="section-card">
       <div className="section-header">
@@ -12,19 +21,19 @@ export default function TitleComparison({ currentAssessment, alternatives, recom
         <span className="section-tag">Rubric Evaluated</span>
       </div>
 
-      {currentAssessment && (
+      {assessment && (
         <div style={{ marginBottom: '1.25rem', padding: '0.85rem 1rem', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
             Current Title Diagnosis:
           </span>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-            {currentAssessment}
+            {assessment}
           </p>
         </div>
       )}
 
       <div className="titles-list">
-        {alternatives && alternatives.map((alt, idx) => {
+        {list && list.map((alt, idx) => {
           const isRecommended = idx === recommendedIndex;
           return (
             <div
